@@ -1,0 +1,21 @@
+/** Adaptation thresholds used by the deterministic decision engine. */
+export const thresholds = {
+  weakQuizScore: 50,
+  passingScore: 70,
+  masteryScore: 90,
+  inactivityTriggerDays: 3,
+  revisionTasksToAdd: 2,
+  labTasksToAdd: 1,
+  milestoneDelayDays: 3,
+  roadmapAccelerationDays: 2,
+  dropoutRiskIncreaseOnInactivity: 20,
+  dropoutRiskDecreaseOnTaskComplete: 5,
+  dropoutRiskIncreaseOnQuizFail: 10,
+  dropoutRiskDecreaseOnMastery: 10,
+  consistencyDecreaseOnQuizFail: 5,
+  consistencyDecreaseOnInactivity: 10,
+  consistencyIncreaseOnMastery: 5,
+  minTaskDurationMinutes: 15,
+  advancedUnlockTopicId: "high-availability",
+  nextTaskShortenFactor: 0.5,
+} as const;
