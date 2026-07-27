@@ -1,6 +1,5 @@
 "use client";
 
-import { StartLiveDemoButton } from "@/components/landing/start-live-demo-button";
 import { AssessmentOverviewCard } from "@/components/assessment/assessment-overview-card";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
@@ -41,7 +40,6 @@ export function AssessmentView() {
           <Button asChild>
             <Link href={routes.onboarding}>Create My Learning Plan</Link>
           </Button>
-          <StartLiveDemoButton variant="secondary" />
         </div>
       </EmptyState>
     );

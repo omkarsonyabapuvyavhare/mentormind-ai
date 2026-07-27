@@ -2,6 +2,7 @@ import { thresholds } from "@/constants/thresholds";
 import {
   capScore,
   createQuizAttemptId,
+  buildQuizAttemptFromEvent,
   createQuizDecisionId,
   findMilestoneForTopic,
   findNextDependentMilestone,
@@ -59,13 +60,7 @@ export function evaluateQuizPerformance(
     context.twin.consistencyScore - thresholds.consistencyDecreaseOnQuizFail,
   );
 
-  const quizAttempt = {
-    id: attemptId,
-    topicId: event.topicId,
-    score: event.score,
-    totalQuestions: event.totalQuestions,
-    completedAt: event.timestamp,
-  };
+  const quizAttempt = buildQuizAttemptFromEvent(event, attemptId);
 
   const updatedQuizHistory = hasQuizAttempt(context.twin.quizHistory, attemptId)
     ? context.twin.quizHistory

@@ -1,32 +1,61 @@
 "use client";
 
-import { GlassCard } from "@/components/ui/glass-card";
-import { awsSaaTopics } from "@/data/aws-saa-seed";
-import type { OnboardingInput } from "@/lib/onboarding/schema";
-import type { LearningFormat, StudyTimeOfDay } from "@/types/learning-twin";
+import { useMemo } from "react";
 
-const studyTimes: StudyTimeOfDay[] = ["morning", "afternoon", "evening"];
-const formats: LearningFormat[] = ["video", "reading", "lab", "quiz"];
+import { FieldHintBadge } from "@/components/onboarding/field-hint-badge";
+import { GlassCard } from "@/components/ui/glass-card";
+import { inferFocusAreas } from "@/lib/goals/goal-identity";
+import { mapFocusAreasToTopicIds } from "@/lib/onboarding/map-parsed-intent";
+import type { OnboardingDraft } from "@/lib/onboarding/onboarding-draft";
+import type { LearningFormat } from "@/types/learning-twin";
+
+const formatOptions: Array<{ value: LearningFormat; label: string }> = [
+  { value: "video", label: "Video" },
+  { value: "reading", label: "Reading" },
+  { value: "lab", label: "Hands-on practice" },
+  { value: "quiz", label: "Quizzes" },
+];
+
+function buildGoalAwareChallengeOptions(draft: OnboardingDraft) {
+  const focusAreas =
+    draft.recommendedFocusAreas.length > 0
+      ? draft.recommendedFocusAreas
+      : inferFocusAreas(draft.goalTitle, draft.goalCategory);
+
+  return focusAreas.map((area) => ({
+    id: mapFocusAreasToTopicIds([area], draft.goalSlug)[0]!,
+    name: area,
+  }));
+}
 
 export function PreferencesStep({
-  input,
-  onChange,
+  draft,
+  onFormatsChange,
+  onChallengesChange,
 }: {
-  input: OnboardingInput;
-  onChange: (patch: Partial<OnboardingInput>) => void;
+  draft: OnboardingDraft;
+  onFormatsChange: (formats: LearningFormat[]) => void;
+  onChallengesChange: (topicIds: string[]) => void;
 }) {
+  const challengeOptions = useMemo(
+    () => buildGoalAwareChallengeOptions(draft),
+    [draft.goalCategory, draft.goalTitle, draft.recommendedFocusAreas],
+  );
+
   const toggleFormat = (format: LearningFormat) => {
-    const next = input.preferredFormats.includes(format)
-      ? input.preferredFormats.filter((entry) => entry !== format)
-      : [...input.preferredFormats, format];
-    onChange({ preferredFormats: next.length > 0 ? next : [format] });
+    const current = draft.preferredFormats.value;
+    const next = current.includes(format)
+      ? current.filter((entry) => entry !== format)
+      : [...current, format];
+    onFormatsChange(next.length > 0 ? next : [format]);
   };
 
   const toggleChallenge = (topicId: string) => {
-    const next = input.knownChallengeTopicIds.includes(topicId)
-      ? input.knownChallengeTopicIds.filter((entry) => entry !== topicId)
-      : [...input.knownChallengeTopicIds, topicId];
-    onChange({ knownChallengeTopicIds: next });
+    const current = draft.knownChallengeTopicIds.value;
+    const next = current.includes(topicId)
+      ? current.filter((entry) => entry !== topicId)
+      : [...current, topicId];
+    onChallengesChange(next);
   };
 
   return (
@@ -38,67 +67,39 @@ export function PreferencesStep({
 
       <div className="mt-6 space-y-6">
         <div>
-          <p className="text-sm text-muted">Preferred study time</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {studyTimes.map((time) => (
-              <button
-                key={time}
-                type="button"
-                onClick={() => onChange({ studyTimeOfDay: time })}
-                className={`rounded-xl px-4 py-2 text-sm capitalize ${
-                  input.studyTimeOfDay === time
-                    ? "bg-cyan-500/20 text-cyan-200"
-                    : "bg-white/5 text-muted"
-                }`}
-              >
-                {time}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <label className="block">
-          <span className="text-sm text-muted">Focus duration (minutes)</span>
-          <input
-            type="number"
-            min={15}
-            max={120}
-            value={input.focusDurationMinutes}
-            onChange={(event) => onChange({ focusDurationMinutes: Number(event.target.value) })}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-          />
-        </label>
-
-        <div>
           <p className="text-sm text-muted">Preferred formats</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {formats.map((format) => (
+            {formatOptions.map((format) => (
               <button
-                key={format}
+                key={format.value}
                 type="button"
-                onClick={() => toggleFormat(format)}
-                className={`rounded-xl px-4 py-2 text-sm capitalize ${
-                  input.preferredFormats.includes(format)
+                onClick={() => toggleFormat(format.value)}
+                className={`rounded-xl px-4 py-2 text-sm ${
+                  draft.preferredFormats.value.includes(format.value)
                     ? "bg-cyan-500/20 text-cyan-200"
                     : "bg-white/5 text-muted"
                 }`}
               >
-                {format}
+                {format.label}
               </button>
             ))}
           </div>
+          <FieldHintBadge source={draft.preferredFormats.source} />
         </div>
 
         <div>
-          <p className="text-sm text-muted">Known weak topics (optional)</p>
+          <p className="text-sm text-muted">Known challenges or topics for extra help (optional)</p>
+          <p className="mt-1 text-xs text-muted">
+            Suggested from your goal — select any areas where you want extra support.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {awsSaaTopics.map((topic) => (
+            {challengeOptions.map((topic) => (
               <button
                 key={topic.id}
                 type="button"
                 onClick={() => toggleChallenge(topic.id)}
                 className={`rounded-xl px-3 py-2 text-sm ${
-                  input.knownChallengeTopicIds.includes(topic.id)
+                  draft.knownChallengeTopicIds.value.includes(topic.id)
                     ? "bg-amber-400/15 text-amber-100"
                     : "bg-white/5 text-muted"
                 }`}
@@ -107,6 +108,7 @@ export function PreferencesStep({
               </button>
             ))}
           </div>
+          <FieldHintBadge source={draft.knownChallengeTopicIds.source} />
         </div>
       </div>
     </GlassCard>

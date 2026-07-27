@@ -13,12 +13,12 @@ import type { AppState } from "@/stores/store-types";
 
 export function useLiveLastSeenLabel({
   snapshot,
-  demoMode,
+  presenterMode,
   learnerEvents,
   freeze = false,
 }: {
   snapshot: EngagementSnapshot | TimelinePreviewFrame;
-  demoMode: boolean;
+  presenterMode: boolean;
   learnerEvents: AppState["learnerEvents"];
   freeze?: boolean;
 }): string {
@@ -29,10 +29,10 @@ export function useLiveLastSeenLabel({
       return snapshot.lastSeenLabel;
     }
 
-    const referenceNow = demoMode
+    const referenceNow = presenterMode
       ? resolveEngagementNow(
           {
-            demoMode,
+            presenterMode,
             twin: { lastActiveAt: snapshot.lastActiveAt } as AppState["twin"],
             learnerEvents,
           },
@@ -41,5 +41,5 @@ export function useLiveLastSeenLabel({
       : clientNow;
 
     return formatRelativeLastSeen(snapshot.lastActiveAt, referenceNow);
-  }, [clientNow, demoMode, freeze, learnerEvents, snapshot]);
+  }, [clientNow, presenterMode, freeze, learnerEvents, snapshot]);
 }

@@ -10,6 +10,6 @@ export const appConfig = {
   },
   features: {
     aiExplanationsEnabled: false,
-    demoModeEnabled: true,
+    presenterModeEnabled: true,
   },
 } as const;

@@ -1,5 +1,6 @@
 import { addDays, parseISO } from "date-fns";
 
+import { formatTopicTitle } from "@/lib/format/topic-title";
 import type { LearnerEventPayload } from "@/types/events";
 import type { LearningTask, Milestone, Roadmap } from "@/types/roadmap";
 import type { Nudge } from "@/types/nudge";
@@ -25,6 +26,23 @@ export function createInactivityDecisionId(event: InactivityPayload): string {
 
 export function createQuizAttemptId(event: QuizCompletedPayload): string {
   return `quiz-${event.topicId}-${event.score}-${event.timestamp}`;
+}
+
+export function buildQuizAttemptFromEvent(
+  event: QuizCompletedPayload,
+  attemptId: string,
+) {
+  return {
+    id: attemptId,
+    topicId: event.topicId,
+    score: event.score,
+    totalQuestions: event.totalQuestions,
+    completedAt: event.timestamp,
+    correctCount: event.correctCount,
+    incorrectCount: event.incorrectCount,
+    masteredConceptTags: event.masteredConceptTags,
+    weakConceptTags: event.weakConceptTags,
+  };
 }
 
 export function createRevisionTaskId(
@@ -111,7 +129,7 @@ export function getTopicName(topicId: string): string {
     "exam-prep": "Exam Preparation",
   };
 
-  return names[topicId] ?? topicId;
+  return names[topicId] ?? formatTopicTitle(topicId);
 }
 
 export function nextRoadmapVersion(roadmap: Roadmap): number {

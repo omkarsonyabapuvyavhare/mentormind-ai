@@ -43,7 +43,7 @@ function simulatePersistedSlice(state: ReturnType<ReturnType<typeof createTestAp
     nudges: state.nudges,
     learnerEvents: state.learnerEvents,
     demoStepIndex: state.demoStepIndex,
-    demoMode: state.demoMode,
+    presenterMode: state.presenterMode,
     isInitialized: state.isInitialized,
     engagementTimelineBaseline: state.engagementTimelineBaseline,
   };
@@ -95,7 +95,7 @@ describe("engagement timeline reset", () => {
         decision.reasons.includes("QUIZ_BELOW_THRESHOLD"),
       ),
     ).toBe(true);
-    expect(restored.demoMode).toBe(true);
+    expect(restored.presenterMode).toBe(true);
   });
 
   it("removes inactivity nudge and INACTIVITY_ESCALATION decision", () => {
@@ -127,7 +127,7 @@ describe("engagement timeline reset", () => {
     runWeakQuizFlow(store);
     runInactivityWithBaselineCapture(store);
 
-    store.setState({ demoMode: false });
+    store.setState({ presenterMode: false });
 
     expect(shouldShowResetTimeline(store.getState())).toBe(false);
     store.getState().resetEngagementTimeline();

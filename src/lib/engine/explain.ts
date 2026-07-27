@@ -3,6 +3,9 @@ import type { ReasonCode } from "@/types/decisions";
 
 export interface ExplanationContext {
   topicName?: string;
+  goalTitle?: string;
+  upcomingTopicName?: string;
+  recoveryTaskTitle?: string;
   score?: number;
   inactivityDays?: number;
   revisionCount?: number;
@@ -29,8 +32,19 @@ function buildQuizFailureExplanation(context: ExplanationContext): string {
 function buildInactivityExplanation(context: ExplanationContext): string {
   const days = context.inactivityDays ?? 3;
   const dayLabel = days === 3 ? "three days" : `${days} days`;
+  const topic = context.topicName ?? "your focus topic";
+  const minutes = context.shortenedMinutes;
+  const upcoming = context.upcomingTopicName;
 
-  return `You've been inactive for ${dayLabel}. To keep your AWS certification plan achievable, I shortened your next session and selected a focused VPC revision task.`;
+  if (minutes && upcoming) {
+    return `You've been inactive for ${dayLabel}. I shortened your next session to ${minutes} minutes and selected a focused ${topic} recovery task before continuing to ${upcoming}.`;
+  }
+
+  if (minutes) {
+    return `You've been inactive for ${dayLabel}. I shortened your next session to ${minutes} minutes and selected a focused ${topic} recovery task.`;
+  }
+
+  return `You've been inactive for ${dayLabel}. I prepared a focused ${topic} recovery session to help you get back on track.`;
 }
 
 function buildMasteryExplanation(context: ExplanationContext): string {

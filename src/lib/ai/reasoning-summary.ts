@@ -122,7 +122,7 @@ export function selectEnrichedNudgeContext(state: AppState, nudge: Nudge): Enric
     return {
       signalLabel: "Inactivity signal",
       signalDetail: `${Math.max(inactivityDays, 3)} days away — dropout risk increased.`,
-      weakestTopic: weak?.topicName ?? "VPC Networking",
+      weakestTopic: weak?.topicName ?? "your focus topic",
       targetOutcome: goalLabel,
     };
   }

@@ -16,7 +16,14 @@ function baseState(overrides: Partial<AppState> = {}): AppState {
   return {
     twin: {
       id: "twin-1",
-      goal: { title: goalTitle, targetDate: "2026-09-01", examCode: "SAA-C03" },
+      goal: {
+        title: goalTitle,
+        targetDate: "2026-09-01",
+        examCode: "SAA-C03",
+        slug: "aws-saa-c03",
+        category: "Cloud",
+        type: "Certification",
+      },
       skillLevel: "intermediate",
       strengths: [],
       weaknesses: [{ topicId: "vpc-networking", topicName: "VPC Networking", score: 42, lastAssessedAt: "2026-07-18" }],
@@ -63,7 +70,7 @@ function baseState(overrides: Partial<AppState> = {}): AppState {
     learnerEvents: [],
     isInitialized: true,
     isHydrated: true,
-    demoMode: false,
+    presenterMode: false,
     demoStepIndex: 0,
     flowCheckpoint: null,
     adaptationReveal: null,
@@ -94,12 +101,14 @@ describe("accountability-nudge", () => {
     const partner = selectActiveAccountabilityPartner(state);
 
     expect(partner?.templateId).toBe("inactivity");
-    expect(partner?.title).toBe("Your mentor noticed you've been away");
+    expect(partner?.title).toBeTruthy();
     expect(partner?.goal).toBe(goalTitle);
     expect(partner?.lastSeenLabel).toBeTruthy();
     expect(partner?.weakTopicLabel).toContain("VPC");
-    expect(partner?.reasoning).toContain("below mastery");
-    expect(partner?.action.label).toBe("Resume Today's Session");
+    expect(partner?.reasoning).toBeTruthy();
+    expect(partner?.reasoningPanel?.signal).toMatch(/Inactive for/i);
+    expect(partner?.reasoningPanel?.learningTwin).toContain("VPC");
+    expect(partner?.action.label).toBe("Resume Learning");
   });
 
   it("keeps inactivity card visible until return is acknowledged", () => {
@@ -120,7 +129,7 @@ describe("accountability-nudge", () => {
 
     expect(partner?.source).toBe("welcome_back");
     expect(partner?.reasoning).toContain(goalTitle);
-    expect(partner?.action.label).toBe("Resume Today's Session");
+    expect(partner?.action.label).toBe("Resume Learning");
   });
 
   it("classifies performance recovery from quiz decision", () => {

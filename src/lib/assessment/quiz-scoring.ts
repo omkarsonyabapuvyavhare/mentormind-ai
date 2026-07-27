@@ -1,4 +1,4 @@
-import type { QuizQuestion } from "@/data/aws-saa-seed";
+import type { AssessmentQuestion } from "@/lib/assessment/assessment-schema";
 
 export interface QuizScoreResult {
   score: number;
@@ -10,7 +10,7 @@ export interface QuizScoreResult {
 }
 
 export function calculateQuizScore(
-  questions: QuizQuestion[],
+  questions: Pick<AssessmentQuestion, "id" | "correctIndex">[],
   selectedAnswers: Record<string, number>,
   passingScore: number,
   masteryScore: number,
@@ -39,7 +39,7 @@ export function calculateQuizScore(
 
 /** Builds selected answers that produce a target score deterministically. */
 export function buildAnswersForTargetScore(
-  questions: QuizQuestion[],
+  questions: Pick<AssessmentQuestion, "id" | "correctIndex">[],
   targetScore: number,
 ): Record<string, number> {
   const targetCorrect = Math.round((targetScore / 100) * questions.length);
@@ -59,7 +59,7 @@ export function buildAnswersForTargetScore(
 }
 
 export function validateAllQuestionsAnswered(
-  questions: QuizQuestion[],
+  questions: Pick<AssessmentQuestion, "id">[],
   selectedAnswers: Record<string, number>,
 ): boolean {
   return questions.every((question) => selectedAnswers[question.id] !== undefined);

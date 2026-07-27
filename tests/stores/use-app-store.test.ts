@@ -12,6 +12,8 @@ import {
   selectRoadmapCompletion,
   selectWeakTopics,
 } from "@/stores/selectors";
+import { createRoadmapFromOnboarding, createTwinFromOnboarding } from "@/lib/onboarding/create-from-input";
+import { onboardingInputSchema } from "@/lib/onboarding/schema";
 import { createTestAppStore } from "@/stores/use-app-store";
 
 const START = "2026-07-17T00:00:00.000Z";
@@ -32,7 +34,7 @@ describe("useAppStore", () => {
       learnerEvents: [],
       isInitialized: false,
       isHydrated: true,
-      demoMode: false,
+      presenterMode: false,
       demoStepIndex: 0,
       lastError: null,
     });
@@ -51,7 +53,7 @@ describe("useAppStore", () => {
       expect(state.nudges).toHaveLength(0);
       expect(state.learnerEvents).toHaveLength(0);
       expect(state.demoStepIndex).toBe(0);
-      expect(state.demoMode).toBe(true);
+      expect(state.presenterMode).toBe(false);
       expect(state.isInitialized).toBe(true);
       expect(state.twin?.currentStreakDays).toBe(demo.initialStreakDays);
       expect(state.roadmap?.version).toBe(demo.initialRoadmapVersion);
@@ -236,7 +238,7 @@ describe("useAppStore", () => {
       const state = store.getState();
 
       expect(state.isInitialized).toBe(true);
-      expect(state.demoMode).toBe(true);
+      expect(state.presenterMode).toBe(true);
       expect(state.demoStepIndex).toBe(1);
       expect(state.twin?.goal.title).toContain("AWS Solutions Architect Associate");
       expect(state.decisions).toHaveLength(0);
@@ -292,6 +294,33 @@ describe("useAppStore", () => {
       expect(state.demoStepIndex).toBe(1);
       expect(state.learnerEvents).toHaveLength(0);
       expect(state.decisions).toHaveLength(0);
+    });
+  });
+
+  describe("completeOnboardingWithRoadmap", () => {
+    it("preserves presenter mode enabled before onboarding completes", () => {
+      const input = onboardingInputSchema.parse({
+        goalSlug: "learn-python",
+        goalTitle: "Learn Python",
+        goalCategory: "Programming",
+        goalType: "Skill",
+        goalId: "learn-python",
+        skillLevel: "beginner",
+        durationWeeks: 8,
+        studyHoursPerWeek: 7,
+        studyTimeOfDay: "evening",
+        focusDurationMinutes: 45,
+        preferredFormats: ["video", "quiz"],
+        knownChallengeTopicIds: [],
+      });
+      const twin = createTwinFromOnboarding(input, START);
+      const roadmap = createRoadmapFromOnboarding(input, twin.id, START);
+
+      store.setState({ presenterMode: true });
+      store.getState().completeOnboardingWithRoadmap(input, roadmap, START);
+
+      expect(store.getState().presenterMode).toBe(true);
+      expect(store.getState().isInitialized).toBe(true);
     });
   });
 

@@ -44,7 +44,7 @@ export function isInactivityNudge(nudge: Nudge): boolean {
 }
 
 export function shouldShowResetTimeline(state: AppState): boolean {
-  if (!state.demoMode) {
+  if (!state.presenterMode) {
     return false;
   }
 
@@ -59,7 +59,7 @@ export function shouldShowResetTimeline(state: AppState): boolean {
 export function buildEngagementTimelineBaselineFromState(
   state: AppState,
 ): EngagementTimelineBaseline | null {
-  if (!state.demoMode || !state.twin || !state.roadmap) {
+  if (!state.presenterMode || !state.twin || !state.roadmap) {
     return null;
   }
 
@@ -171,7 +171,7 @@ function reverseTwinInactivityChanges(state: AppState): LearningTwin {
 export function deriveEngagementTimelineBaseline(
   state: AppState,
 ): EngagementTimelineBaseline | null {
-  if (!state.demoMode || !state.twin || !state.roadmap) {
+  if (!state.presenterMode || !state.twin || !state.roadmap) {
     return null;
   }
 

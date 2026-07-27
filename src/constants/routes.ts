@@ -7,6 +7,7 @@ export const routes = {
   roadmap: "/roadmap",
   assessment: "/assessment",
   assessmentVpc: "/assessment/vpc-networking",
+  assessmentTopic: (topicId: string) => `/assessment/${topicId}`,
   mentor: "/mentor",
   mentorFeedback: "/mentor/feedback",
   planUpdated: "/plan-updated",

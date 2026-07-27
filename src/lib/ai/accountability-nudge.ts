@@ -1,4 +1,5 @@
 import { routes } from "@/constants/routes";
+import { buildInactivityExpectedBenefit } from "@/lib/engine/nudge-content";
 import { formatInactivityLastSeenLabel } from "@/lib/learner/engagement-display";
 import { selectLearnerGoalLabel, withGoalReference } from "@/lib/ai/reasoning-summary";
 import { selectTodayMission } from "@/lib/tutor/mission";
@@ -19,8 +20,15 @@ export type AccountabilityTemplateId =
   | "mastery_celebration";
 
 export interface AccountabilityPartnerAction {
-  label: "Resume Today's Session" | "Review Updated Plan" | "Continue Learning";
+  label: "Resume Learning" | "Review Updated Plan" | "Continue Learning";
   href: string;
+}
+
+export interface AccountabilityReasoningPanel {
+  signal: string;
+  learningTwin: string;
+  decision: string;
+  expectedBenefit: string;
 }
 
 export interface AccountabilityPartnerMessage {
@@ -36,6 +44,7 @@ export interface AccountabilityPartnerMessage {
   source: "nudge" | "decision" | "welcome_back";
   lastSeenLabel?: string;
   weakTopicLabel?: string;
+  reasoningPanel?: AccountabilityReasoningPanel;
 }
 
 export function isInactivityNudge(nudge: Nudge): boolean {
@@ -78,7 +87,7 @@ function buildAction(
 
   switch (templateId) {
     case "inactivity":
-      return { label: "Resume Today's Session", href: mission.lessonHref };
+      return { label: "Resume Learning", href: mission.lessonHref };
     case "performance_recovery":
       return { label: "Review Updated Plan", href: routes.planUpdated };
     case "mastery_celebration":
@@ -86,22 +95,46 @@ function buildAction(
   }
 }
 
-function buildInactivityMessage(state: AppState, nudge: Nudge): AccountabilityPartnerMessage {
+function buildInactivityReasoningPanel(
+  state: AppState,
+  focusTopic: string,
+  decision: Decision | null,
+): AccountabilityReasoningPanel {
+  const inactivityDays = Math.max(state.twin?.inactivityDays ?? 0, 3);
+  const transparency = decision ? selectDecisionTransparency(state, decision) : null;
+  const dayLabel = inactivityDays === 3 ? "3 days" : `${inactivityDays} days`;
+
+  return {
+    signal: `Inactive for ${dayLabel}`,
+    learningTwin: `Weak topic: ${focusTopic}`,
+    decision: transparency?.whatChanged ?? "Recovery session prepared — next lesson shortened",
+    expectedBenefit:
+      transparency?.expectedBenefit ?? buildInactivityExpectedBenefit(focusTopic),
+  };
+}
+
+function buildInactivityMessage(
+  state: AppState,
+  nudge: Nudge,
+  decision: Decision | null = selectLatestDecision(state),
+): AccountabilityPartnerMessage {
   const goal = selectLearnerGoalLabel(state);
   const weak = selectWeakestTopic(state) ?? selectWeakTopics(state)[0];
   const inactivityDays = Math.max(state.twin?.inactivityDays ?? 0, 3);
-  const focusTopic = weak?.topicName ?? "your focus topic";
+  const focusTopic = weak?.topicName ?? state.twin?.knownChallenges[0]?.topicName ?? "your focus topic";
   const lastSeenLabel = formatInactivityLastSeenLabel(inactivityDays);
+  const reasoningPanel = buildInactivityReasoningPanel(state, focusTopic, decision);
 
   return {
     id: nudge.id,
     templateId: "inactivity",
-    title: "Your mentor noticed you've been away",
+    title: nudge.title || "Your mentor noticed you've been away",
     goal,
     signal: `${lastSeenLabel} · ${focusTopic}`,
     lastSeenLabel,
     weakTopicLabel: focusTopic,
-    reasoning: `Your recent assessment showed ${focusTopic} is still below mastery. To keep your certification plan achievable, today's session has been shortened.`,
+    reasoning: nudge.body,
+    reasoningPanel,
     action: buildAction("inactivity", state),
     severity: nudge.severity,
     createdAt: nudge.createdAt,
@@ -166,19 +199,19 @@ export function buildAccountabilityPartnerMessage(
   decision: Decision | null = selectLatestDecision(state),
 ): AccountabilityPartnerMessage | null {
   if (templateId === "inactivity" && nudge) {
-    return buildInactivityMessage(state, nudge);
+    return buildInactivityMessage(state, nudge, decision);
   }
 
   if (templateId === "inactivity" && decision?.reasons.includes("INACTIVITY_ESCALATION")) {
     const syntheticNudge: Nudge = {
       id: `synthetic-inactivity-${decision.id}`,
-      title: "Stay on track with your AWS goal",
+      title: decision.explanation.split(".")[0] ?? "Your mentor noticed you've been away",
       body: decision.explanation,
       severity: "warning",
       createdAt: decision.createdAt,
       read: false,
     };
-    return buildInactivityMessage(state, syntheticNudge);
+    return buildInactivityMessage(state, syntheticNudge, decision);
   }
 
   if (!decision) {

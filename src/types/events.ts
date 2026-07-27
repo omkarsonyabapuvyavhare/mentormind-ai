@@ -13,6 +13,10 @@ export interface QuizCompletedEvent {
   topicId: string;
   score: number;
   totalQuestions: number;
+  correctCount?: number;
+  incorrectCount?: number;
+  masteredConceptTags?: string[];
+  weakConceptTags?: string[];
   timestamp: string;
 }
 

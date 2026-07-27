@@ -4,7 +4,6 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { DashboardCommandCenter } from "@/components/dashboard/dashboard-command-center";
-import { StartLiveDemoButton } from "@/components/landing/start-live-demo-button";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorBanner } from "@/components/shared/error-banner";
@@ -33,7 +32,6 @@ export function DashboardView() {
           <Button asChild>
             <Link href={routes.onboarding}>Create My Learning Plan</Link>
           </Button>
-          <StartLiveDemoButton />
         </div>
       </EmptyState>
     );

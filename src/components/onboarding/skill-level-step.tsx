@@ -1,32 +1,49 @@
 "use client";
 
+import { FieldHintBadge } from "@/components/onboarding/field-hint-badge";
 import { GlassCard } from "@/components/ui/glass-card";
-import type { OnboardingInput } from "@/lib/onboarding/schema";
+import type { FieldWithSource } from "@/lib/onboarding/onboarding-draft";
 import type { SkillLevel } from "@/types/learning-twin";
 
 const levels: { value: SkillLevel; label: string; description: string }[] = [
-  { value: "beginner", label: "Beginner", description: "New to cloud or certification prep" },
+  { value: "beginner", label: "Complete beginner", description: "New to this topic or skill area" },
   {
     value: "intermediate",
     label: "Intermediate",
-    description: "Some AWS exposure and prior study experience",
+    description: "Some prior exposure and practical experience",
   },
-  { value: "advanced", label: "Advanced", description: "Strong foundation, exam-focused refinement" },
+  { value: "advanced", label: "Advanced", description: "Strong foundation and exam- or project-ready skills" },
 ];
+
+function formatSkillLabel(skillLevel: SkillLevel): string {
+  return skillLevel.charAt(0).toUpperCase() + skillLevel.slice(1);
+}
 
 export function SkillLevelStep({
   value,
+  suggestion,
   onChange,
 }: {
-  value: OnboardingInput["skillLevel"];
+  value: SkillLevel | null;
+  suggestion?: FieldWithSource<SkillLevel> | null;
   onChange: (skillLevel: SkillLevel) => void;
 }) {
   return (
     <GlassCard>
       <h2 className="text-xl font-semibold">Current skill level</h2>
       <p className="mt-2 text-sm text-muted">
-        This helps MentorMind calibrate pacing and prerequisite emphasis.
+        Choose the level that best matches where you are today. MentorMind uses this to calibrate
+        pacing and prerequisite emphasis.
       </p>
+
+      {suggestion ? (
+        <div className="mt-4 rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
+          <p className="text-sm font-medium">Suggested based on your description</p>
+          <p className="mt-1 text-sm text-muted">{formatSkillLabel(suggestion.value)}</p>
+          <FieldHintBadge source={suggestion.source} />
+        </div>
+      ) : null}
+
       <div className="mt-6 space-y-3">
         {levels.map((level) => (
           <button

@@ -6,9 +6,9 @@ import { Clock3, HelpCircle, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
-import type { assessmentCatalog } from "@/constants/assessment";
+import type { AssessmentCatalogEntry } from "@/constants/assessment-catalog";
 
-type AssessmentTopic = (typeof assessmentCatalog)[number];
+type AssessmentTopic = AssessmentCatalogEntry;
 
 export function AssessmentOverviewCard({
   topic,

@@ -57,9 +57,9 @@ export function selectSessionPrimaryAction(state: AppState): SessionAction {
     !latestDecision?.reasons.includes("QUIZ_MASTERY_ACHIEVED")
   ) {
     return {
-      label: "Retake VPC assessment",
-      href: routes.assessmentVpc,
-      hint: "Demonstrate mastery to accelerate your certification timeline.",
+      label: "Retake topic check-in",
+      href: selectTodayMission(state).assessmentHref ?? routes.dashboard,
+      hint: "Demonstrate mastery to accelerate your learning timeline.",
     };
   }
 
@@ -133,7 +133,7 @@ function hasWeakQuizSignal(state: AppState): boolean {
 }
 
 export function shouldShowInactivityShortcut(state: AppState): boolean {
-  if (!state.demoMode) {
+  if (!state.presenterMode) {
     return false;
   }
 

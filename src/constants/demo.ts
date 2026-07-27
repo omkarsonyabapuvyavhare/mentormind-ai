@@ -17,10 +17,14 @@ export const demo = {
   initialPlannedMinutes: 24 * 60,
   initialLearningVelocity: 2.4,
   initialRoadmapVersion: 3,
+  /** Keep in sync with `demoSteps.length` in demo-script.ts */
+  demoStepCount: 4 as number,
 } as const;
 
 export const demoInitialRecommendation =
   "Prioritize the VPC Networking Lab today. It is a prerequisite for upcoming cloud architecture milestones.";
+
+export const demoStepCount = demo.demoStepCount;
 
 export const demoNoDecisionMessage =
   "No roadmap changes yet. Complete an assessment to activate adaptive planning.";

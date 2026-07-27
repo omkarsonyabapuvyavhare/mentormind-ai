@@ -4,8 +4,8 @@ import {
   demoInitialRecommendation,
   demoNoDecisionMessage,
   demoNoWeaknessMessage,
+  demoStepCount,
 } from "@/constants/demo";
-import { demoSteps } from "@/data/demo-script";
 import { getTopicName } from "@/lib/engine/helpers";
 import {
   buildDecisionTransparency,
@@ -314,7 +314,7 @@ function applyActionToSummary(action: DecisionAction, summary: DecisionActionSum
 }
 
 export function selectDecisionTransparency(
-  state: Pick<AppState, "decisions" | "learnerEvents">,
+  state: Pick<AppState, "decisions" | "learnerEvents" | "twin">,
   decision = selectLatestDecision(state),
 ): DecisionTransparency | null {
   if (!decision) {
@@ -323,21 +323,26 @@ export function selectDecisionTransparency(
 
   const summary = summarizeDecisionActions(decision);
   const lastQuiz = selectLastQuizEvent(state);
-  const trigger = buildTriggerLabel(decision, lastQuiz);
+  const trigger = buildTriggerLabel(decision, lastQuiz, state.twin?.inactivityDays);
   const whatChanged = buildWhatChangedLabel(decision, summary);
   const why = decision.explanation.split(".")[0] ?? decision.explanation;
 
   return buildDecisionTransparency(trigger, whatChanged, why, decision.reasons);
 }
 
-function buildTriggerLabel(decision: Decision, lastQuiz: QuizCompletedEvent | null): string {
+function buildTriggerLabel(
+  decision: Decision,
+  lastQuiz: QuizCompletedEvent | null,
+  inactivityDays?: number,
+): string {
   if (decision.eventType === "QUIZ_COMPLETED" && lastQuiz) {
     const topicName = getTopicName(lastQuiz.topicId);
     return `${topicName} quiz score: ${lastQuiz.score}%`;
   }
 
   if (decision.eventType === "INACTIVITY_TICK") {
-    return `${thresholds.inactivityTriggerDays}-day inactivity detected`;
+    const days = inactivityDays ?? thresholds.inactivityTriggerDays;
+    return `Inactive for ${days} days`;
   }
 
   return decision.eventType.replaceAll("_", " ").toLowerCase();
@@ -423,7 +428,7 @@ export function selectDemoProgress(state: Pick<AppState, "demoStepIndex">): {
   totalSteps: number;
   percent: number;
 } {
-  const totalSteps = demoSteps.length;
+  const totalSteps = demoStepCount;
   const completedSteps = Math.min(state.demoStepIndex, totalSteps);
 
   return {

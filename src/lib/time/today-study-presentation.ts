@@ -29,7 +29,7 @@ function latestQuizScore(state: Pick<AppState, "twin">): number | null {
  * never from browser uptime or lifetime twin totals.
  */
 export function selectTodayStudyPresentationMinutes(
-  state: Pick<AppState, "demoMode" | "twin" | "decisions">,
+  state: Pick<AppState, "presenterMode" | "twin" | "decisions">,
 ): number {
   const twin = state.twin;
 
@@ -39,7 +39,7 @@ export function selectTodayStudyPresentationMinutes(
 
   const latestScore = latestQuizScore(state);
 
-  if (state.demoMode) {
+  if (state.presenterMode) {
     if (
       hasDecisionReason(state, "QUIZ_MASTERY_ACHIEVED") ||
       (latestScore !== null && latestScore >= thresholds.masteryScore)

@@ -1,5 +1,8 @@
-import { DemoView } from "@/components/demo/demo-view";
+import { redirect } from "next/navigation";
 
+import { routes } from "@/constants/routes";
+
+/** Legacy /demo URL — forwards to unified onboarding with presenter tooling enabled. */
 export default function DemoPage() {
-  return <DemoView />;
+  redirect(`${routes.onboarding}?presenter=true`);
 }

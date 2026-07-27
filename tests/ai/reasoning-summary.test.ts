@@ -16,7 +16,14 @@ function baseState(): AppState {
   return {
     twin: {
       id: "twin-1",
-      goal: { title: goalTitle, targetDate: "2026-09-01", examCode: "SAA-C03" },
+      goal: {
+        title: goalTitle,
+        targetDate: "2026-09-01",
+        examCode: "SAA-C03",
+        slug: "aws-saa-c03",
+        category: "Cloud",
+        type: "Certification",
+      },
       skillLevel: "intermediate",
       strengths: [],
       weaknesses: [{ topicId: "vpc-networking", topicName: "VPC Networking", score: 42, lastAssessedAt: "2026-07-18" }],
@@ -44,7 +51,7 @@ function baseState(): AppState {
     learnerEvents: [],
     isInitialized: true,
     isHydrated: true,
-    demoMode: false,
+    presenterMode: false,
     demoStepIndex: 0,
     flowCheckpoint: null,
     adaptationReveal: null,

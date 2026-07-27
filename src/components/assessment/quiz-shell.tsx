@@ -1,32 +1,38 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AiReasoningSummaryCard } from "@/components/shared/ai-reasoning-summary-card";
+import { AssessmentResultsSummary } from "@/components/assessment/assessment-results-summary";
 import { MentorAnalysisOverlay } from "@/components/shared/mentor-analysis-overlay";
 import { QuizNavigation } from "@/components/assessment/quiz-navigation";
 import { QuizProgress } from "@/components/assessment/quiz-progress";
 import { QuizQuestionCard } from "@/components/assessment/quiz-question-card";
+import { PresenterControls } from "@/components/presenter/presenter-controls";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
-import { Badge } from "@/components/ui/badge";
-import { demo } from "@/constants/demo";
 import { routes } from "@/constants/routes";
-import { theme } from "@/constants/theme";
 import { thresholds } from "@/constants/thresholds";
-import type { TopicQuiz } from "@/data/aws-saa-seed";
+import type { TopicAssessment } from "@/lib/assessment/assessment-schema";
 import {
-  buildAnswersForTargetScore,
-  calculateQuizScore,
   validateAllQuestionsAnswered,
 } from "@/lib/assessment/quiz-scoring";
+import {
+  scoreAssessmentByConcept,
+  type ConceptScoreResult,
+} from "@/lib/assessment/concept-scoring";
+import { buildQuizCompletedPayload } from "@/lib/assessment/normalize-quiz-result";
 import { selectAssessmentReasoningSummary } from "@/lib/ai/reasoning-summary";
+import {
+  buildPresenterQuizResult,
+  PRESENTER_MASTERY_SCORE,
+  PRESENTER_WEAK_SCORE,
+} from "@/lib/presenter/simulate-quiz-score";
 import { useAppStore } from "@/stores/use-app-store";
 import type { AdaptationRevealKind } from "@/types/ui-state";
-import type { LearnerEventPayload } from "@/types/events";
 
-type QuizPhase = "taking" | "confirming" | "analyzing" | "reasoning";
+type QuizPhase = "taking" | "confirming" | "results" | "analyzing" | "reasoning";
 
 function resolveRevealKind(score: number): AdaptationRevealKind {
   if (score >= thresholds.masteryScore) {
@@ -40,11 +46,11 @@ function resolveRevealKind(score: number): AdaptationRevealKind {
   return "neutral";
 }
 
-export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
+export function QuizShell({ assessment }: { assessment: TopicAssessment }) {
   const router = useRouter();
   const dispatchLearnerEvent = useAppStore((state) => state.dispatchLearnerEvent);
   const showAdaptationReveal = useAppStore((state) => state.showAdaptationReveal);
-  const isInitialized = useAppStore((state) => state.isInitialized);
+  const presenterMode = useAppStore((state) => state.presenterMode);
   const lastError = useAppStore((state) => state.lastError);
 
   const storeState = useAppStore();
@@ -56,8 +62,22 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [submittedScore, setSubmittedScore] = useState<number | null>(null);
+  const [scoreResult, setScoreResult] = useState<ConceptScoreResult | null>(null);
   const hasSubmittedRef = useRef(false);
   const pendingScoreRef = useRef(0);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || phase !== "taking") {
+      return;
+    }
+
+    console.info("[QuizShell]", {
+      shouldRenderPresenterControls: presenterMode,
+      hasAssessment: Boolean(assessment),
+      phase,
+      questionCount: assessment.questions.length,
+    });
+  }, [assessment, phase, presenterMode]);
 
   const finishAnalysis = useCallback(() => {
     setPhase("reasoning");
@@ -69,30 +89,24 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
     router.push(routes.mentorFeedback);
   }, [router, showAdaptationReveal, submittedScore]);
 
-  const currentQuestion = quiz.questions[currentIndex];
+  const currentQuestion = assessment.questions[currentIndex];
 
   const dispatchQuizScore = useCallback(
-    (score: number, timestamp: string) => {
+    (result: ConceptScoreResult, timestamp: string) => {
       if (hasSubmittedRef.current) {
         setSubmissionError("This assessment was already submitted.");
         return false;
       }
 
-      const event: LearnerEventPayload = {
-        type: "QUIZ_COMPLETED",
-        topicId: quiz.topicId,
-        score,
-        totalQuestions: quiz.questions.length,
-        timestamp,
-      };
-
+      const event = buildQuizCompletedPayload(assessment, result, timestamp);
       dispatchLearnerEvent(event);
       hasSubmittedRef.current = true;
-      pendingScoreRef.current = score;
-      setSubmittedScore(score);
+      pendingScoreRef.current = result.score;
+      setSubmittedScore(result.score);
+      setScoreResult(result);
       return true;
     },
-    [dispatchLearnerEvent, quiz.questions.length, quiz.topicId],
+    [assessment, dispatchLearnerEvent],
   );
 
   const handleSubmit = useCallback(
@@ -102,7 +116,7 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
         return;
       }
 
-      if (!validateAllQuestionsAnswered(quiz.questions, answers) && forcedScore === undefined) {
+      if (!validateAllQuestionsAnswered(assessment.questions, answers) && forcedScore === undefined) {
         setSubmissionError("Please answer every question before submitting.");
         return;
       }
@@ -110,41 +124,74 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
       setIsSubmitting(true);
       setSubmissionError(null);
 
-      const result = calculateQuizScore(
-        quiz.questions,
+      let result = scoreAssessmentByConcept(
+        assessment.questions,
         answers,
-        quiz.passingScore,
+        assessment.passingScore,
         thresholds.masteryScore,
       );
-      const score = forcedScore ?? result.score;
-      const timestamp = new Date().toISOString();
 
-      const dispatched = dispatchQuizScore(score, timestamp);
+      if (forcedScore !== undefined) {
+        result = {
+          ...result,
+          score: forcedScore,
+          passed: forcedScore >= assessment.passingScore,
+          mastery: forcedScore >= thresholds.masteryScore,
+        };
+      }
+
+      const timestamp = new Date().toISOString();
+      const dispatched = dispatchQuizScore(result, timestamp);
+
       if (!dispatched) {
         setIsSubmitting(false);
         return;
       }
 
       setAnalysisTitle(
-        score >= thresholds.masteryScore
+        result.score >= thresholds.masteryScore
           ? "MentorMind detected mastery."
           : "MentorMind is analyzing your learning...",
       );
-      setPhase("analyzing");
+      setPhase("results");
       setIsSubmitting(false);
     },
-    [dispatchQuizScore, isSubmitting, quiz.passingScore, quiz.questions],
+    [assessment.passingScore, assessment.questions, dispatchQuizScore, isSubmitting],
   );
 
   const handleConfirmSubmit = () => {
     handleSubmit(selectedAnswers);
   };
 
-  const handleSimulate = (targetScore: number) => {
-    const answers = buildAnswersForTargetScore(quiz.questions, targetScore);
-    setSelectedAnswers(answers);
-    handleSubmit(answers, targetScore);
-  };
+  const handlePresenterSimulate = useCallback(
+    (targetScore: number) => {
+      if (isSubmitting || hasSubmittedRef.current) {
+        setSubmissionError("This assessment was already submitted.");
+        return;
+      }
+
+      setSubmissionError(null);
+      setIsSubmitting(true);
+
+      const result = buildPresenterQuizResult(assessment, targetScore);
+      const timestamp = new Date().toISOString();
+      const dispatched = dispatchQuizScore(result, timestamp);
+
+      if (!dispatched) {
+        setIsSubmitting(false);
+        return;
+      }
+
+      setAnalysisTitle(
+        targetScore >= thresholds.masteryScore
+          ? "MentorMind detected mastery."
+          : "MentorMind is analyzing your learning...",
+      );
+      setPhase("analyzing");
+      setIsSubmitting(false);
+    },
+    [assessment, dispatchQuizScore, isSubmitting],
+  );
 
   if (phase === "reasoning" && submittedScore !== null) {
     const summary = selectAssessmentReasoningSummary(storeState, submittedScore);
@@ -167,6 +214,15 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
         title={analysisTitle}
         subtitle="Your Learning Twin and roadmap are updating in real time."
         onComplete={finishAnalysis}
+      />
+    );
+  }
+
+  if (phase === "results" && scoreResult) {
+    return (
+      <AssessmentResultsSummary
+        result={scoreResult}
+        onContinue={() => setPhase("analyzing")}
       />
     );
   }
@@ -194,7 +250,7 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
 
   return (
     <div className="space-y-6">
-      <QuizProgress currentIndex={currentIndex} totalQuestions={quiz.questions.length} />
+      <QuizProgress currentIndex={currentIndex} totalQuestions={assessment.questions.length} />
 
       <QuizQuestionCard
         question={currentQuestion}
@@ -215,11 +271,11 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
       <QuizNavigation
         canGoPrevious={currentIndex > 0}
         canGoNext={selectedAnswers[currentQuestion.id] !== undefined}
-        isLastQuestion={currentIndex === quiz.questions.length - 1}
+        isLastQuestion={currentIndex === assessment.questions.length - 1}
         onPrevious={() => setCurrentIndex((index) => Math.max(0, index - 1))}
-        onNext={() => setCurrentIndex((index) => Math.min(quiz.questions.length - 1, index + 1))}
+        onNext={() => setCurrentIndex((index) => Math.min(assessment.questions.length - 1, index + 1))}
         onSubmit={() => {
-          if (!validateAllQuestionsAnswered(quiz.questions, selectedAnswers)) {
+          if (!validateAllQuestionsAnswered(assessment.questions, selectedAnswers)) {
             setSubmissionError("Please answer every question before submitting.");
             return;
           }
@@ -229,22 +285,15 @@ export function QuizShell({ quiz }: { quiz: TopicQuiz }) {
         submitDisabled={isSubmitting}
       />
 
-      {isInitialized ? (
-        <GlassCard className={theme.cards.warning}>
-          <Badge className={theme.badges.demo}>Live demo shortcuts</Badge>
-          <p className="mt-3 text-sm text-muted">
-            Submit a score instantly — your mentor will respond with feedback and an updated plan.
-          </p>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <Button variant="secondary" disabled={isSubmitting} onClick={() => handleSimulate(demo.weakQuizScore)}>
-              Submit 42% result
-            </Button>
-            <Button variant="secondary" disabled={isSubmitting} onClick={() => handleSimulate(demo.masteryQuizScore)}>
-              Submit 95% result
-            </Button>
-          </div>
-        </GlassCard>
-      ) : null}
+      <PresenterControls
+        layout="inline"
+        assessment={assessment}
+        disabled={isSubmitting}
+        handlers={{
+          onSimulateWeak: () => handlePresenterSimulate(PRESENTER_WEAK_SCORE),
+          onSimulateMastery: () => handlePresenterSimulate(PRESENTER_MASTERY_SCORE),
+        }}
+      />
     </div>
   );
 }

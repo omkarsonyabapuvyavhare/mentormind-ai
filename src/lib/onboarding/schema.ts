@@ -1,16 +1,19 @@
 import { z } from "zod";
 
-import { onboardingGoalTemplates } from "@/constants/onboarding";
+import { goalCategorySchema, goalTypeSchema } from "@/lib/goals/goal-identity";
 import {
   learningFormatSchema,
   skillLevelSchema,
   studyTimeOfDaySchema,
 } from "@/types/schemas";
 
-const goalIds = onboardingGoalTemplates.map((goal) => goal.id) as [string, ...string[]];
-
 export const onboardingInputSchema = z.object({
-  goalId: z.enum(goalIds),
+  goalSlug: z.string().min(1).max(64),
+  goalTitle: z.string().min(1).max(200),
+  goalCategory: goalCategorySchema,
+  goalType: goalTypeSchema,
+  /** Backward-compatible alias used by roadmap caches and APIs — mirrors goalSlug. */
+  goalId: z.string().min(1).max(64),
   skillLevel: skillLevelSchema,
   durationWeeks: z.number().int().min(4).max(16),
   studyHoursPerWeek: z.number().min(1).max(40),
@@ -22,7 +25,28 @@ export const onboardingInputSchema = z.object({
 
 export type OnboardingInput = z.infer<typeof onboardingInputSchema>;
 
-export const onboardingDefaults: OnboardingInput = {
+/** Neutral defaults for universal goals — never AWS-specific. */
+export const universalOnboardingDefaults: OnboardingInput = {
+  goalSlug: "learning-goal",
+  goalTitle: "Personal learning goal",
+  goalCategory: "General Technology",
+  goalType: "Skill",
+  goalId: "learning-goal",
+  skillLevel: "beginner",
+  durationWeeks: 8,
+  studyHoursPerWeek: 6,
+  studyTimeOfDay: "evening",
+  focusDurationMinutes: 45,
+  preferredFormats: ["video", "quiz"],
+  knownChallengeTopicIds: [],
+};
+
+/** AWS SAA seed defaults — use only for AWS certification tests and demo seeds. */
+export const awsOnboardingDefaults: OnboardingInput = {
+  goalSlug: "aws-saa-c03",
+  goalTitle: "AWS Solutions Architect Associate",
+  goalCategory: "Cloud",
+  goalType: "Certification",
   goalId: "aws-saa-c03",
   skillLevel: "intermediate",
   durationWeeks: 8,
@@ -32,3 +56,6 @@ export const onboardingDefaults: OnboardingInput = {
   preferredFormats: ["video", "lab", "quiz"],
   knownChallengeTopicIds: ["vpc-networking"],
 };
+
+/** @deprecated Prefer `universalOnboardingDefaults` or `awsOnboardingDefaults` explicitly. */
+export const onboardingDefaults = universalOnboardingDefaults;

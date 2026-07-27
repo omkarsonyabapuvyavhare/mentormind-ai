@@ -6,10 +6,15 @@ export const studyTimeOfDaySchema = z.enum(["morning", "afternoon", "evening"]);
 
 export const learningFormatSchema = z.enum(["video", "reading", "lab", "quiz"]);
 
+import { goalCategorySchema, goalTypeSchema } from "@/lib/goals/goal-identity";
+
 export const goalSchema = z.object({
   title: z.string().min(1),
   targetDate: z.string().datetime(),
   examCode: z.string().optional(),
+  slug: z.string().min(1).max(64),
+  category: goalCategorySchema,
+  type: goalTypeSchema,
 });
 
 export const learningPreferencesSchema = z.object({
@@ -31,6 +36,10 @@ export const quizAttemptSchema = z.object({
   score: z.number().min(0).max(100),
   totalQuestions: z.number().int().positive(),
   completedAt: z.string().datetime(),
+  correctCount: z.number().int().min(0).optional(),
+  incorrectCount: z.number().int().min(0).optional(),
+  masteredConceptTags: z.array(z.string().min(1).max(64)).optional(),
+  weakConceptTags: z.array(z.string().min(1).max(64)).optional(),
 });
 
 export const learningTwinSchema = z.object({
@@ -97,6 +106,7 @@ export const learningTaskSchema = z.object({
   priority: z.number().int(),
   injectedBy: z.string().optional(),
   unlocked: z.boolean(),
+  learningObjectives: z.array(z.string().min(1).max(200)).max(6).optional(),
 });
 
 export const roadmapSchema = z.object({
@@ -143,6 +153,10 @@ export const learnerEventSchema = z.discriminatedUnion("type", [
     topicId: z.string().min(1),
     score: z.number().min(0).max(100),
     totalQuestions: z.number().int().positive(),
+    correctCount: z.number().int().min(0).optional(),
+    incorrectCount: z.number().int().min(0).optional(),
+    masteredConceptTags: z.array(z.string().min(1).max(64)).optional(),
+    weakConceptTags: z.array(z.string().min(1).max(64)).optional(),
     timestamp: z.string().datetime(),
   }),
   z.object({

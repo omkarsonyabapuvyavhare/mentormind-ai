@@ -15,7 +15,7 @@ function diagnose(state: ReturnType<ReturnType<typeof createTestAppStore>["getSt
   const latestQuiz = state.twin?.quizHistory[state.twin.quizHistory.length - 1];
 
   return {
-    demoMode: state.demoMode,
+    presenterMode: state.presenterMode,
     demoStepIndex: state.demoStepIndex,
     latestQuizScore: latestQuiz?.score ?? null,
     latestDecisionType: latestDecision?.eventType ?? null,
@@ -42,7 +42,7 @@ describe("inactivity shortcut after full weak-performance flow", () => {
     store.getState().enterDemoFromLanding(DEMO_ENTRY);
 
     const afterEntry = diagnose(store.getState());
-    expect(afterEntry.demoMode).toBe(true);
+    expect(afterEntry.presenterMode).toBe(true);
     expect(afterEntry.shouldShow).toBe(false);
 
     const questionCount = awsSaaQuizzes["vpc-networking"].questions.length;
@@ -62,7 +62,7 @@ describe("inactivity shortcut after full weak-performance flow", () => {
     store.getState().dismissAdaptationReveal();
 
     const afterPlan = diagnose(store.getState());
-    expect(afterPlan.demoMode).toBe(true);
+    expect(afterPlan.presenterMode).toBe(true);
     expect(afterPlan.latestDecisionReasons).toContain("QUIZ_BELOW_THRESHOLD");
     expect(afterPlan.shouldShow).toBe(true);
   });

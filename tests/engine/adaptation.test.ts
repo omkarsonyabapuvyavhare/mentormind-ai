@@ -289,7 +289,8 @@ describe("adaptation engine", () => {
       const nudge = getAction<SendNudgeAction>(result, "SEND_NUDGE");
 
       expect(nudge?.nudge.severity).toBe("warning");
-      expect(nudge?.nudge.body).toMatch(/three days/i);
+      expect(nudge?.nudge.body).toMatch(/three study sessions|three days|been away/i);
+      expect(nudge?.nudge.body).not.toMatch(/hardcoded/i);
     });
   });
 });

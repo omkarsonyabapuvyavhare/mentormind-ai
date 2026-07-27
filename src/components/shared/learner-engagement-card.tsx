@@ -30,11 +30,11 @@ export function LearnerEngagementCard({
   streakLabel?: string;
   riskLabel?: string;
 }) {
-  const demoMode = useAppStore((state) => state.demoMode);
+  const presenterMode = useAppStore((state) => state.presenterMode);
   const learnerEvents = useAppStore((state) => state.learnerEvents);
   const lastSeenLabel = useLiveLastSeenLabel({
     snapshot,
-    demoMode,
+    presenterMode,
     learnerEvents,
     freeze: freezeLastSeen || animate,
   });

@@ -8,6 +8,7 @@ import {
   nextRoadmapVersion,
   shortenTaskDuration,
 } from "@/lib/engine/helpers";
+import { buildInactivityNudgeContent } from "@/lib/engine/nudge-content";
 import type { LearnerEventPayload } from "@/types/events";
 import type { DecisionAction, EngineContext, ReasonCode } from "@/types/decisions";
 import type { LearningTwin } from "@/types/learning-twin";
@@ -79,12 +80,14 @@ export function evaluateInactivity(
     });
   }
 
+  const nudgeContent = buildInactivityNudgeContent(event, context, shortenedMinutes);
+
   actions.push({
     action: "SEND_NUDGE",
     nudge: {
       id: nudgeId,
-      title: "Stay on track with your AWS goal",
-      body: `You've been inactive for three days. To keep your AWS certification plan achievable, I shortened your next session and selected a focused VPC revision task.`,
+      title: nudgeContent.title,
+      body: nudgeContent.body,
       severity: "warning",
       createdAt: event.timestamp,
       read: false,
@@ -106,7 +109,10 @@ export function evaluateInactivity(
     explanationContext: {
       inactivityDays: event.days,
       shortenedMinutes,
-      topicName: "VPC Networking",
+      topicName: nudgeContent.topicName,
+      goalTitle: nudgeContent.goalTitle,
+      upcomingTopicName: nudgeContent.upcomingTopicName ?? undefined,
+      recoveryTaskTitle: nudgeContent.recoveryTaskTitle,
     },
   };
 }

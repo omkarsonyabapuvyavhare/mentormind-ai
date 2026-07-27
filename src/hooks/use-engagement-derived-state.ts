@@ -14,21 +14,21 @@ import { useAppStore } from "@/stores/use-app-store";
 /** Minimal store slice used by engagement selectors — kept referentially stable via useMemo. */
 function useEngagementStoreSlice(): Pick<
   AppState,
-  "twin" | "decisions" | "learnerEvents" | "demoMode"
+  "twin" | "decisions" | "learnerEvents" | "presenterMode"
 > {
   const twin = useAppStore((state) => state.twin);
   const decisions = useAppStore((state) => state.decisions);
   const learnerEvents = useAppStore((state) => state.learnerEvents);
-  const demoMode = useAppStore((state) => state.demoMode);
+  const presenterMode = useAppStore((state) => state.presenterMode);
 
   return useMemo(
     () => ({
       twin,
       decisions,
       learnerEvents,
-      demoMode,
+      presenterMode,
     }),
-    [twin, decisions, learnerEvents, demoMode],
+    [twin, decisions, learnerEvents, presenterMode],
   );
 }
 

@@ -8,7 +8,7 @@ import {
 } from "@/lib/ai/mentor-responses";
 import { createTwinFromOnboarding } from "@/lib/onboarding/create-from-input";
 import { createRoadmapFromOnboarding } from "@/lib/onboarding/create-from-input";
-import { onboardingDefaults } from "@/lib/onboarding/schema";
+import { awsOnboardingDefaults } from "@/lib/onboarding/schema";
 import {
   selectCurrentStreak,
   selectDropoutRisk,
@@ -33,32 +33,32 @@ describe("onboarding, learning twin, and mentor slice", () => {
   });
 
   it("A. onboarding inputs generate the expected Learning Twin", () => {
-    const twin = createTwinFromOnboarding(onboardingDefaults, START);
+    const twin = createTwinFromOnboarding(awsOnboardingDefaults, START);
 
     expect(twin.skillLevel).toBe("intermediate");
     expect(twin.plannedStudyMinutes).toBe(24 * 60 * 8);
     expect(twin.knownChallenges).toEqual([
-      { topicId: "vpc-networking", topicName: "VPC Networking" },
+      { topicId: "vpc-networking", topicName: "Vpc Networking" },
     ]);
     expect(twin.preferences.focusDurationMinutes).toBe(45);
     expect(twin.goal.examCode).toBe("SAA-C03");
   });
 
   it("B. AWS goal creates an 8-week roadmap", () => {
-    const twin = createTwinFromOnboarding(onboardingDefaults, START);
-    const roadmap = createRoadmapFromOnboarding(onboardingDefaults, twin.id, START);
+    const twin = createTwinFromOnboarding(awsOnboardingDefaults, START);
+    const roadmap = createRoadmapFromOnboarding(awsOnboardingDefaults, twin.id, START);
 
     expect(roadmap.milestones).toHaveLength(8);
     expect(roadmap.version).toBe(1);
   });
 
   it("C. Learning Twin initial state matches onboarding inputs", () => {
-    store.getState().completeOnboarding(onboardingDefaults, START);
+    store.getState().completeOnboarding(awsOnboardingDefaults, START);
     const state = store.getState();
 
     expect(state.isInitialized).toBe(true);
-    expect(state.demoMode).toBe(false);
-    expect(state.twin?.skillLevel).toBe(onboardingDefaults.skillLevel);
+    expect(state.presenterMode).toBe(false);
+    expect(state.twin?.skillLevel).toBe(awsOnboardingDefaults.skillLevel);
     expect(state.twin?.knownChallenges[0]?.topicId).toBe("vpc-networking");
     expect(state.twin?.preferences.studyTimeOfDay).toBe("evening");
     expect(state.roadmap?.milestones).toHaveLength(8);

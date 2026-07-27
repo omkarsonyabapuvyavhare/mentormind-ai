@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, BrainCircuit, RefreshCw, Target } from "lucide-react";
 
-import { ViewDemoButton } from "@/components/landing/view-demo-button";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { PageContainer } from "@/components/shared/page-container";
@@ -28,13 +27,13 @@ const pillars = [
   },
 ];
 
-const liveLoopSteps = [
-  "Create your learning plan",
-  "Start today's session",
-  "Submit assessment",
+const learningLoopSteps = [
+  "Describe your learning goal",
+  "Get a personalized roadmap",
+  "Study today's lesson",
+  "Complete a topic check-in",
   "Roadmap adapts automatically",
-  "AI Mentor explains why",
-  "Retake and accelerate",
+  "Your AI mentor explains why",
 ];
 
 export function LandingView() {
@@ -52,13 +51,13 @@ export function LandingView() {
 
       <section className="mt-16 grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
         <div>
-          <p className="text-sm uppercase tracking-[0.18em] text-cyan-300">Adaptive certification prep</p>
+          <p className="text-sm uppercase tracking-[0.18em] text-cyan-300">Adaptive learning</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight md:text-5xl">
             Your <span className="text-gradient">AI mentor</span> for goal-driven learning
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-muted md:text-lg">
-            Follow one continuous loop — plan, assess, adapt, explain, and master — without leaving the
-            product or opening a presenter panel.
+            Describe your goal in plain language, study personalized lessons, and let MentorMind adapt
+            your roadmap from every assessment signal.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -67,17 +66,13 @@ export function LandingView() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
-            <ViewDemoButton />
           </div>
-          <p className="mt-3 text-sm text-muted">
-            Live demo tip: use Create Plan for the full story, or Start live demo for a demo-ready learner.
-          </p>
         </div>
 
         <GlassCard>
-          <p className="text-sm uppercase tracking-[0.18em] text-violet-200">Live demo loop</p>
+          <p className="text-sm uppercase tracking-[0.18em] text-violet-200">Your learning loop</p>
           <ol className="mt-5 space-y-3 text-sm">
-            {liveLoopSteps.map((step, index) => (
+            {learningLoopSteps.map((step, index) => (
               <li
                 key={step}
                 className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"

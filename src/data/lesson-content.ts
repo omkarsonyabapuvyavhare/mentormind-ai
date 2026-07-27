@@ -88,9 +88,12 @@ export const lessonContentByTopic: Record<string, LessonContent> = {
   },
 };
 
-export function getLessonContent(topicId: string): LessonContent {
-  return (
-    lessonContentByTopic[topicId] ??
-    lessonContentByTopic["vpc-networking"]
-  );
+/** Returns AWS seed lesson content when available; never falls back to unrelated topics. */
+export function getLessonContent(topicId: string): LessonContent | null {
+  return lessonContentByTopic[topicId] ?? null;
+}
+
+/** Demo and AWS SAA seed fallback — preserves legacy VPC default for unknown seed topics. */
+export function getAwsSeedLessonContent(topicId: string): LessonContent {
+  return lessonContentByTopic[topicId] ?? lessonContentByTopic["vpc-networking"];
 }

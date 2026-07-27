@@ -23,7 +23,14 @@ function baseState(overrides: Partial<AppState> = {}): AppState {
   return {
     twin: {
       id: "twin-1",
-      goal: { title: "Pass AWS SAA", targetDate: "2026-09-01", examCode: "SAA-C03" },
+      goal: {
+        title: "Pass AWS SAA",
+        targetDate: "2026-09-01",
+        examCode: "SAA-C03",
+        slug: "aws-saa-c03",
+        category: "Cloud",
+        type: "Certification",
+      },
       skillLevel: "intermediate",
       strengths: [],
       weaknesses: [],
@@ -51,7 +58,7 @@ function baseState(overrides: Partial<AppState> = {}): AppState {
     learnerEvents: [],
     isInitialized: true,
     isHydrated: true,
-    demoMode: true,
+    presenterMode: true,
     demoStepIndex: 1,
     flowCheckpoint: null,
     adaptationReveal: null,

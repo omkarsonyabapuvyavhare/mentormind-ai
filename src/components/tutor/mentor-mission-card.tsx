@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { theme } from "@/constants/theme";
 import { MENTOR_VOICE } from "@/constants/mentor-voice";
+import { recordStartLearningClick } from "@/lib/learn/lesson-fetch-timing";
 import { selectTodayMission } from "@/lib/tutor/mission";
 import { useAppStore } from "@/stores/use-app-store";
 
@@ -56,7 +57,14 @@ export function MentorMissionCard() {
         </dl>
 
         <div className="mt-8 border-t border-white/10 pt-6">
-          <Button size="lg" className="w-full sm:w-auto" onClick={() => router.push(mission.lessonHref)}>
+          <Button
+            size="lg"
+            className="w-full sm:w-auto"
+            onClick={() => {
+              recordStartLearningClick(mission.topicId, state.roadmap?.goalId);
+              router.push(mission.lessonHref);
+            }}
+          >
             Start Learning
             <ArrowRight className="h-4 w-4" />
           </Button>

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { shouldShowInactivityShortcut } from "@/lib/demo/session-actions";
-import { onboardingDefaults } from "@/lib/onboarding/schema";
+import { awsOnboardingDefaults } from "@/lib/onboarding/schema";
 import { createTestAppStore } from "@/stores/use-app-store";
 
 const START = "2026-07-17T00:00:00.000Z";
@@ -14,10 +14,12 @@ describe("shouldShowInactivityShortcut", () => {
   beforeEach(() => {
     store = createTestAppStore();
     store.getState().initializeDemoLearner(START);
+    store.setState({ presenterMode: true });
   });
 
-  it("is hidden when demo mode is off", () => {
-    store.getState().completeOnboarding(onboardingDefaults, START);
+  it("is hidden when presenter mode is off", () => {
+    store.getState().completeOnboarding(awsOnboardingDefaults, START);
+    store.getState().setPresenterMode(false);
 
     store.getState().dispatchLearnerEvent({
       type: "QUIZ_COMPLETED",
@@ -27,11 +29,13 @@ describe("shouldShowInactivityShortcut", () => {
       timestamp: QUIZ_FAIL,
     });
 
-    expect(store.getState().demoMode).toBe(false);
+    expect(store.getState().presenterMode).toBe(false);
     expect(shouldShowInactivityShortcut(store.getState())).toBe(false);
   });
 
-  it("appears after a weak quiz in demo mode", () => {
+  it("appears after a weak quiz in presenter mode", () => {
+    store.setState({ presenterMode: true });
+
     store.getState().dispatchLearnerEvent({
       type: "QUIZ_COMPLETED",
       topicId: "vpc-networking",
@@ -40,7 +44,7 @@ describe("shouldShowInactivityShortcut", () => {
       timestamp: QUIZ_FAIL,
     });
 
-    expect(store.getState().demoMode).toBe(true);
+    expect(store.getState().presenterMode).toBe(true);
     expect(shouldShowInactivityShortcut(store.getState())).toBe(true);
   });
 

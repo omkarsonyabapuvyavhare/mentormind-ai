@@ -14,7 +14,8 @@ export interface AppState {
   learnerEvents: LearnerEvent[];
   isInitialized: boolean;
   isHydrated: boolean;
-  demoMode: boolean;
+  /** Hidden presenter tooling — activated via ?presenter=true or env flag. */
+  presenterMode: boolean;
   demoStepIndex: number;
   flowCheckpoint: DemoFlowHint | null;
   adaptationReveal: AdaptationReveal | null;
@@ -31,11 +32,23 @@ export interface AppActions {
   applyEngineResult: (result: import("@/types/decisions").EngineResult) => void;
   completeTask: (taskId: string, timestamp: string) => void;
   resetDemo: (timestamp: string) => void;
+  resetJourney: () => void;
+  setPresenterMode: (enabled: boolean) => void;
+  /** Sync presenter mode from URL/session/env — never downgrades an active session. */
+  syncPresenterMode: (search?: string, source?: string) => boolean;
+  /** @deprecated Legacy script runner — tests and recovery panel only. */
   enterDemoFromLanding: (timestamp: string) => void;
+  /** @deprecated Legacy script runner — tests and recovery panel only. */
   runNextDemoStep: (timestamp: string) => void;
+  /** @deprecated Legacy script runner — tests and recovery panel only. */
   runAllDemoSteps: (timestamp: string) => void;
   markNudgeRead: (nudgeId: string) => void;
   completeOnboarding: (input: import("@/lib/onboarding/schema").OnboardingInput, timestamp: string) => void;
+  completeOnboardingWithRoadmap: (
+    input: import("@/lib/onboarding/schema").OnboardingInput,
+    roadmap: import("@/types/roadmap").Roadmap,
+    timestamp: string,
+  ) => void;
   markFlowCheckpoint: (hint: import("@/lib/demo/flow-hint").DemoFlowHint) => void;
   showAdaptationReveal: (kind: import("@/types/ui-state").AdaptationRevealKind, score: number) => void;
   dismissAdaptationReveal: () => void;
@@ -59,7 +72,7 @@ export const initialAppState: AppState = {
   learnerEvents: [],
   isInitialized: false,
   isHydrated: false,
-  demoMode: false,
+  presenterMode: false,
   demoStepIndex: 0,
   flowCheckpoint: null,
   adaptationReveal: null,

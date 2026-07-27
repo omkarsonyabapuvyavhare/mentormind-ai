@@ -1,0 +1,61 @@
+{
+  "timestamp": "2026-07-27T11:20:10.687Z",
+  "results": [
+    {
+      "name": "Onboarding → Dashboard",
+      "passed": true,
+      "detail": "http://localhost:3000/dashboard"
+    },
+    {
+      "name": "Dashboard → Lesson",
+      "passed": true,
+      "detail": "http://localhost:3000/learn/python-basics"
+    },
+    {
+      "name": "Question progress 1 of 5",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Previous button",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Next button",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Simulate 42%",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Simulate 95%",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Fast Forward 3 Days",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Reset Journey",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "42pct: inline presenter controls visible",
+      "passed": true,
+      "detail": "Simulate 42%"
+    },
+    {
+      "name": "Runtime verification",
+      "passed": false,
+      "detail": "page.waitForURL: Timeout 30000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"load\"\n============================================================"
+    }
+  ],
+  "allPassed": false
+}

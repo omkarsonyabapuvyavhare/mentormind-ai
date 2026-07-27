@@ -1,7 +1,7 @@
 "use client";
 
 import { GlassCard } from "@/components/ui/glass-card";
-import type { QuizQuestion } from "@/data/aws-saa-seed";
+import type { AssessmentQuestion } from "@/lib/assessment/assessment-schema";
 
 import { AnswerOption } from "./answer-option";
 
@@ -12,7 +12,7 @@ export function QuizQuestionCard({
   onSelect,
   disabled,
 }: {
-  question: QuizQuestion;
+  question: AssessmentQuestion;
   questionNumber: number;
   selectedIndex?: number;
   onSelect: (index: number) => void;

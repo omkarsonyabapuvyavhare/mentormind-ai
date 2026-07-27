@@ -10,7 +10,7 @@ export interface DecisionTransparency {
 const reasonBenefits: Partial<Record<ReasonCode, string>> = {
   QUIZ_BELOW_THRESHOLD: "Build mastery before progressing to advanced architecture topics.",
   QUIZ_MASTERY_ACHIEVED: "Move forward faster with confidence in foundational networking skills.",
-  INACTIVITY_ESCALATION: "Keep your AWS certification plan achievable with smaller, focused sessions.",
+  INACTIVITY_ESCALATION: "Rebuild confidence with a shorter, focused recovery session before moving forward.",
   REVISION_NO_LONGER_NEEDED: "Spend time on new content instead of unnecessary repetition.",
   MILESTONE_DELAYED_FOR_REMEDIATION: "Create space to strengthen prerequisites before the next milestone.",
   ROADMAP_ACCELERATED: "Reach your certification goal sooner after demonstrated mastery.",

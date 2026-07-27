@@ -24,6 +24,7 @@ export interface LearningTask {
   priority: number;
   injectedBy?: string;
   unlocked: boolean;
+  learningObjectives?: string[];
 }
 
 export interface Roadmap {

@@ -1,23 +1,30 @@
+import { demoLearnerId } from "@/lib/roadmap/generate-initial";
 import type { AppState } from "@/stores/store-types";
 
-/** Demo is actively in progress once step 1 (initialize) is complete. */
-export function isDemoInProgress(state: Pick<AppState, "isInitialized" | "demoMode" | "twin" | "roadmap" | "demoStepIndex">): boolean {
+function isLegacyDemoLearner(
+  state: Pick<AppState, "twin" | "roadmap">,
+): boolean {
+  return state.twin?.id === demoLearnerId && state.roadmap !== null;
+}
+
+/** Legacy script runner is active once step 1 (initialize) is complete. */
+export function isDemoInProgress(
+  state: Pick<AppState, "isInitialized" | "twin" | "roadmap" | "demoStepIndex">,
+): boolean {
   return (
     state.isInitialized &&
-    state.demoMode &&
-    state.twin !== null &&
-    state.roadmap !== null &&
+    isLegacyDemoLearner(state) &&
     state.demoStepIndex >= 1
   );
 }
 
-/** Clean demo baseline exists but presenter has not advanced past initialize. */
-export function isCleanDemoBaseline(state: Pick<AppState, "isInitialized" | "demoMode" | "twin" | "roadmap" | "demoStepIndex">): boolean {
+/** Legacy demo baseline exists but script has not advanced past initialize. */
+export function isCleanDemoBaseline(
+  state: Pick<AppState, "isInitialized" | "twin" | "roadmap" | "demoStepIndex">,
+): boolean {
   return (
     state.isInitialized &&
-    state.demoMode &&
-    state.twin !== null &&
-    state.roadmap !== null &&
+    isLegacyDemoLearner(state) &&
     state.demoStepIndex === 0
   );
 }

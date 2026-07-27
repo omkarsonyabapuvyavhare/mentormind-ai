@@ -128,10 +128,10 @@ export function selectLatestInactivityTickEvent(
 
 /** Demo uses scripted event time, not wall clock, so engagement does not drift to Inactive on load. */
 export function resolveEngagementNow(
-  state: Pick<AppState, "demoMode" | "twin" | "learnerEvents">,
+  state: Pick<AppState, "presenterMode" | "twin" | "learnerEvents">,
   now = new Date(),
 ): Date {
-  if (!state.demoMode || !state.twin) {
+  if (!state.presenterMode || !state.twin) {
     return now;
   }
 
@@ -149,7 +149,7 @@ export function resolveEngagementNow(
 
 /** Single canonical day count shared by status, last seen, and preview frames. */
 export function selectEffectiveInactivityDays(
-  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "demoMode">,
+  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "presenterMode">,
   now = new Date(),
 ): number {
   const twin = state.twin;
@@ -172,7 +172,7 @@ export function selectEffectiveInactivityDays(
 }
 
 export function selectEngagementStatus(
-  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "demoMode">,
+  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "presenterMode">,
   now = new Date(),
 ): EngagementStatus {
   const twin = state.twin;
@@ -258,7 +258,7 @@ export function selectEngagementStreakPresentation(
 }
 
 function selectEngagementLastSeenLabel(
-  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "demoMode">,
+  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "presenterMode">,
   status: EngagementStatus,
   effectiveDays: number,
   now = new Date(),
@@ -282,7 +282,7 @@ function selectEngagementLastSeenLabel(
 }
 
 export function selectEngagementSnapshot(
-  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "demoMode">,
+  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "presenterMode">,
   now = new Date(),
 ): EngagementSnapshot | null {
   const twin = state.twin;
@@ -311,7 +311,7 @@ export function selectEngagementSnapshot(
 }
 
 export function buildTimelinePreviewFrames(
-  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "demoMode">,
+  state: Pick<AppState, "twin" | "decisions" | "learnerEvents" | "presenterMode">,
 ): TimelinePreviewFrame[] {
   const snapshot = selectEngagementSnapshot(state);
 

@@ -63,7 +63,18 @@ export function AccountabilityPartnerCard({
 
       <dl className={`mt-5 grid gap-3 ${compact ? "text-xs" : "text-sm"}`}>
         <PartnerRow icon={<Target className="h-3.5 w-3.5" />} label="Your goal" value={message.goal} />
-        {message.templateId === "inactivity" && message.lastSeenLabel && message.weakTopicLabel ? (
+        {message.reasoningPanel ? (
+          <>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Why MentorMind suggested this
+            </p>
+            <PartnerRow label="Signal" value={message.reasoningPanel.signal} />
+            <PartnerRow label="Learning Twin" value={message.reasoningPanel.learningTwin} />
+            <PartnerRow label="Decision" value={message.reasoningPanel.decision} />
+            <PartnerRow label="Expected benefit" value={message.reasoningPanel.expectedBenefit} />
+            <PartnerRow label="Personalized nudge" value={message.reasoning} />
+          </>
+        ) : message.templateId === "inactivity" && message.lastSeenLabel && message.weakTopicLabel ? (
           <>
             <PartnerRow label="Last seen" value={message.lastSeenLabel} />
             <PartnerRow label="Weak topic" value={message.weakTopicLabel} />

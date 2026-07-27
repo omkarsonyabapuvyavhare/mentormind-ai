@@ -1,3 +1,5 @@
+import type { GoalCategory, GoalType } from "@/lib/goals/goal-identity";
+
 export type SkillLevel = "beginner" | "intermediate" | "advanced";
 
 export type StudyTimeOfDay = "morning" | "afternoon" | "evening";
@@ -8,6 +10,9 @@ export interface Goal {
   title: string;
   targetDate: string;
   examCode?: string;
+  slug: string;
+  category: GoalCategory;
+  type: GoalType;
 }
 
 export interface LearningPreferences {
@@ -29,6 +34,10 @@ export interface QuizAttempt {
   score: number;
   totalQuestions: number;
   completedAt: string;
+  correctCount?: number;
+  incorrectCount?: number;
+  masteredConceptTags?: string[];
+  weakConceptTags?: string[];
 }
 
 export interface KnownChallenge {

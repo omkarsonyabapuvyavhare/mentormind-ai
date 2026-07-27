@@ -1,0 +1,49 @@
+import { NextResponse } from "next/server";
+
+import { createDeterministicLessonForLearner } from "@/lib/ai/lesson-fallback";
+import { generateLessonForLearner } from "@/lib/ai/lesson-service";
+import { generateLessonRequestSchema } from "@/lib/learn/generate-lesson-request-schema";
+
+export async function POST(request: Request) {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+
+  const parsed = generateLessonRequestSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  }
+
+  const input = parsed.data;
+
+  try {
+    const result = await generateLessonForLearner(input);
+
+    return NextResponse.json({
+      source: result.source,
+      lesson: result.lesson,
+      fallbackReason: result.fallbackReason,
+    });
+  } catch {
+    const fallback = createDeterministicLessonForLearner(
+      {
+        goalId: input.goalId,
+        topicId: input.topicId,
+        topicTitle: input.topicTitle,
+        durationMinutes: input.durationMinutes,
+      },
+      "request-error",
+    );
+
+    return NextResponse.json({
+      source: fallback.source,
+      lesson: fallback.lesson,
+      fallbackReason: fallback.fallbackReason,
+    });
+  }
+}

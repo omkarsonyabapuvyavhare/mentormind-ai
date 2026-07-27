@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BrainCircuit,
-  FlaskConical,
   Map,
   Sparkles,
   UserRound,
@@ -20,13 +19,6 @@ const mainNavItems = [
   { href: routes.mentor, label: "Ask Mentor", icon: BrainCircuit, enabled: true },
   { href: routes.profile, label: "Learning Twin", icon: UserRound, enabled: true },
 ] as const;
-
-const recoveryNavItem = {
-  href: routes.demo,
-  label: "Recovery panel",
-  icon: FlaskConical,
-  enabled: true,
-} as const;
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -71,30 +63,6 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
           </Link>
         );
       })}
-
-      <div className="my-2 border-t border-white/10" />
-
-      {(() => {
-        const item = recoveryNavItem;
-        const Icon = item.icon;
-        const active = pathname === item.href;
-
-        return (
-          <Link
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
-              active
-                ? "bg-amber-500/10 text-amber-200"
-                : "text-muted hover:bg-white/5 hover:text-foreground",
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {item.label}
-          </Link>
-        );
-      })()}
     </nav>
   );
 }

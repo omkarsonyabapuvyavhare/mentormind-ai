@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { appConfig } from "@/config/app-config";
 import { demoSteps } from "@/data/demo-script";
+import { logDecisionEngineResult } from "@/lib/dev/architecture-log";
 import { applyEngineResult } from "@/lib/engine/apply";
 import { evaluate } from "@/lib/engine/index";
 import {
@@ -22,6 +23,15 @@ import {
   createRoadmapFromOnboarding,
   createTwinFromOnboarding,
 } from "@/lib/onboarding/create-from-input";
+import {
+  logPresenterModeTransition,
+  persistPresenterMode,
+  readInitialPresenterMode,
+  readPresenterModeFromSearch,
+  resolvePresenterMode,
+  resolvePresenterModeDetails,
+} from "@/lib/presenter/presenter-mode";
+import { clearAllJourneyCaches } from "@/lib/session/clear-journey-caches";
 import type { OnboardingInput } from "@/lib/onboarding/schema";
 import {
   ensureLearnerEventId,
@@ -42,7 +52,6 @@ type PersistedAppState = Pick<
   | "nudges"
   | "learnerEvents"
   | "demoStepIndex"
-  | "demoMode"
   | "isInitialized"
   | "engagementTimelineBaseline"
 >;
@@ -140,7 +149,6 @@ function validatePersistedState(persisted: unknown): PersistedAppState | null {
           )
       : [],
     demoStepIndex: typeof candidate.demoStepIndex === "number" ? candidate.demoStepIndex : 0,
-    demoMode: Boolean(candidate.demoMode),
     isInitialized: Boolean(candidate.isInitialized),
     engagementTimelineBaseline:
       candidate.engagementTimelineBaseline &&
@@ -167,7 +175,7 @@ export function createAppStoreSlice(
       learnerEvents: previous.learnerEvents,
       isInitialized: previous.isInitialized,
       isHydrated: previous.isHydrated,
-      demoMode: previous.demoMode,
+      presenterMode: previous.presenterMode,
       demoStepIndex: previous.demoStepIndex,
       flowCheckpoint: previous.flowCheckpoint,
       adaptationReveal: previous.adaptationReveal,
@@ -183,6 +191,7 @@ export function createAppStoreSlice(
         roadmap: roadmapOverride ?? snapshot.roadmap,
       });
       const result = evaluate(normalizedEvent, context);
+      logDecisionEngineResult(normalizedEvent, result);
       const nextState = mergeEngineResultIntoState(snapshot, normalizedEvent, result, roadmapOverride);
 
       set({
@@ -207,6 +216,7 @@ export function createAppStoreSlice(
 
   return {
     ...initialAppState,
+    presenterMode: readInitialPresenterMode(),
 
     initializeDemoLearner: (timestamp) => {
       set({
@@ -221,7 +231,7 @@ export function createAppStoreSlice(
         mentorAutoExplain: false,
         returnWelcomeMessage: null,
         engagementTimelineBaseline: null,
-        demoMode: true,
+        presenterMode: false,
         isInitialized: true,
         lastError: null,
       });
@@ -241,7 +251,7 @@ export function createAppStoreSlice(
         learnerEvents: previous.learnerEvents,
         isInitialized: previous.isInitialized,
         isHydrated: previous.isHydrated,
-        demoMode: previous.demoMode,
+        presenterMode: previous.presenterMode,
         demoStepIndex: previous.demoStepIndex,
         flowCheckpoint: previous.flowCheckpoint,
         adaptationReveal: previous.adaptationReveal,
@@ -329,6 +339,59 @@ export function createAppStoreSlice(
       get().initializeDemoLearner(timestamp);
     },
 
+    resetJourney: () => {
+      clearAllJourneyCaches();
+      const presenterMode = get().presenterMode || resolvePresenterMode(undefined, get().presenterMode);
+
+      if (presenterMode) {
+        persistPresenterMode(true);
+      }
+
+      set({
+        ...initialAppState,
+        isHydrated: true,
+        presenterMode,
+      });
+    },
+
+    setPresenterMode: (enabled) => {
+      persistPresenterMode(enabled);
+      set({ presenterMode: enabled });
+    },
+
+    syncPresenterMode: (search, source = "sync") => {
+      const storeBefore = get().presenterMode;
+
+      if (search && readPresenterModeFromSearch(search)) {
+        persistPresenterMode(true);
+      }
+
+      const resolution = resolvePresenterModeDetails(search, storeBefore);
+
+      if (resolution.resolved) {
+        if (!storeBefore) {
+          persistPresenterMode(true);
+          set({ presenterMode: true });
+        }
+
+        logPresenterModeTransition({
+          source,
+          storeBefore,
+          storeAfter: true,
+          resolution,
+        });
+        return true;
+      }
+
+      logPresenterModeTransition({
+        source,
+        storeBefore,
+        storeAfter: storeBefore,
+        resolution,
+      });
+      return storeBefore;
+    },
+
     enterDemoFromLanding: (timestamp) => {
       const state = get();
 
@@ -337,9 +400,10 @@ export function createAppStoreSlice(
       }
 
       if (isCleanDemoBaseline(state)) {
+        persistPresenterMode(true);
         set({
           demoStepIndex: demoEntryStepIndex,
-          demoMode: true,
+          presenterMode: true,
           flowCheckpoint: null,
           adaptationReveal: null,
           mentorAutoExplain: false,
@@ -350,6 +414,7 @@ export function createAppStoreSlice(
         return;
       }
 
+      persistPresenterMode(true);
       set({
         twin: createDemoTwin(timestamp),
         roadmap: generateDemoRoadmap(timestamp),
@@ -362,15 +427,21 @@ export function createAppStoreSlice(
         mentorAutoExplain: false,
         returnWelcomeMessage: null,
         engagementTimelineBaseline: null,
-        demoMode: true,
+        presenterMode: true,
         isInitialized: true,
         lastError: null,
       });
     },
 
+    /** @deprecated Use `completeOnboardingWithRoadmap` after Summary confirmation. Tests only. */
     completeOnboarding: (input: OnboardingInput, timestamp) => {
       const twin = createTwinFromOnboarding(input, timestamp);
       const roadmap = createRoadmapFromOnboarding(input, twin.id, timestamp);
+      const presenterMode = get().presenterMode || resolvePresenterMode(undefined, get().presenterMode);
+
+      if (presenterMode) {
+        persistPresenterMode(true);
+      }
 
       set({
         twin,
@@ -384,7 +455,39 @@ export function createAppStoreSlice(
         mentorAutoExplain: false,
         returnWelcomeMessage: null,
         engagementTimelineBaseline: null,
-        demoMode: false,
+        presenterMode,
+        isInitialized: true,
+        lastError: null,
+      });
+
+      get().dispatchLearnerEvent({
+        type: "ONBOARDING_COMPLETED",
+        twin,
+        timestamp,
+      });
+    },
+
+    completeOnboardingWithRoadmap: (input: OnboardingInput, roadmap, timestamp) => {
+      const twin = createTwinFromOnboarding(input, timestamp);
+      const presenterMode = get().presenterMode || resolvePresenterMode(undefined, get().presenterMode);
+
+      if (presenterMode) {
+        persistPresenterMode(true);
+      }
+
+      set({
+        twin,
+        roadmap,
+        decisions: [],
+        nudges: [],
+        learnerEvents: [],
+        demoStepIndex: 0,
+        flowCheckpoint: null,
+        adaptationReveal: null,
+        mentorAutoExplain: false,
+        returnWelcomeMessage: null,
+        engagementTimelineBaseline: null,
+        presenterMode,
         isInitialized: true,
         lastError: null,
       });
@@ -501,7 +604,7 @@ export function createAppStoreSlice(
 
     resetEngagementTimeline: () => {
       set((state) => {
-        if (!state.demoMode || !state.twin || !state.roadmap) {
+        if (!state.presenterMode || !state.twin || !state.roadmap) {
           return {};
         }
 
@@ -542,36 +645,42 @@ export const useAppStore = create<AppStore>()(
         nudges: state.nudges,
         learnerEvents: state.learnerEvents,
         demoStepIndex: state.demoStepIndex,
-        demoMode: state.demoMode,
         isInitialized: state.isInitialized,
-        engagementTimelineBaseline: state.demoMode
+        engagementTimelineBaseline: state.presenterMode
           ? state.engagementTimelineBaseline
           : null,
       }),
       merge: (persisted, current) => {
         const validated = validatePersistedState(persisted);
         if (!validated) {
+          const presenterMode = resolvePresenterMode(undefined, current.presenterMode);
           return {
             ...current,
             isHydrated: true,
+            presenterMode: presenterMode ? true : current.presenterMode,
           };
         }
+
+        const presenterMode = resolvePresenterMode(undefined, current.presenterMode);
 
         return {
           ...current,
           ...validated,
           isHydrated: true,
           lastError: null,
+          presenterMode: presenterMode ? true : current.presenterMode,
         };
       },
       onRehydrateStorage: () => (state, error) => {
         if (error) {
           state?.setHydrated(true);
           state?.clearError();
+          state?.syncPresenterMode(undefined, "rehydrate-error");
           return;
         }
 
         state?.setHydrated(true);
+        state?.syncPresenterMode(undefined, "rehydrate");
       },
       skipHydration: typeof window === "undefined",
     },
