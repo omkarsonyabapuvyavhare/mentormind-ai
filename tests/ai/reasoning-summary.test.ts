@@ -72,7 +72,23 @@ describe("reasoning-summary", () => {
   });
 
   it("selectAssessmentReasoningSummary includes four reasoning rows", () => {
-    const summary = selectAssessmentReasoningSummary(baseState(), 42);
+    const state = {
+      ...baseState(),
+      learnerEvents: [
+        {
+          id: "evt-quiz-1",
+          type: "QUIZ_COMPLETED" as const,
+          topicId: "vpc-networking",
+          score: 42,
+          totalQuestions: 5,
+          correctAnswers: 2,
+          weakConceptTags: [],
+          masteredConceptTags: [],
+          occurredAt: "2026-07-18T12:00:00.000Z",
+        },
+      ],
+    };
+    const summary = selectAssessmentReasoningSummary(state, 42);
     expect(summary.signalDetected).toBeTruthy();
     expect(summary.learningTwinUpdate).toContain("VPC Networking");
     expect(summary.decisionMade).toBeTruthy();

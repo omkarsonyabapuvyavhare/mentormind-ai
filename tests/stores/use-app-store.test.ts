@@ -220,7 +220,7 @@ describe("useAppStore", () => {
       store.getState().runAllDemoSteps(START);
       const state = store.getState();
 
-      expect(selectRoadmapCompletion(state)).toBeGreaterThan(0);
+      expect(selectRoadmapCompletion(state).percentage).toBeGreaterThan(0);
       expect(selectCurrentMilestone(state)?.id).toBe("ms-week-4");
       expect(selectWeakTopics(state)).toHaveLength(0);
       expect(selectLatestDecision(state)?.reasons).toContain("QUIZ_MASTERY_ACHIEVED");

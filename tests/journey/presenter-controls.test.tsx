@@ -48,33 +48,74 @@ describe("PresenterControls visibility", () => {
   afterEach(() => {
     cleanup();
     mockStoreState.presenterMode = false;
+    vi.stubEnv("NEXT_PUBLIC_PRESENTER_MODE", "false");
     vi.clearAllMocks();
   });
 
   it("is hidden for normal learners", () => {
     mockStoreState.presenterMode = false;
+    vi.stubEnv("NEXT_PUBLIC_PRESENTER_MODE", "false");
 
-    const { container } = render(<PresenterControls />);
+    const { container } = render(<PresenterControls variant="dashboard" />);
     expect(container.firstChild).toBeNull();
-    expect(screen.queryByText("Simulate 42%")).toBeNull();
+    expect(screen.queryByText("Submit 42% Score")).toBeNull();
+    expect(screen.queryByText("Fast Forward 3 Days")).toBeNull();
   });
 
-  it("is visible only when presenter mode is enabled", () => {
+  it("shows only dashboard controls on dashboard route", () => {
+    mockStoreState.presenterMode = true;
+    mockStoreState.isInitialized = true;
+    vi.stubEnv("NEXT_PUBLIC_PRESENTER_MODE", "false");
+
+    render(<PresenterControls variant="dashboard" layout="inline" />);
+    expect(screen.getByText("Fast Forward 3 Days")).toBeTruthy();
+    expect(screen.queryByText("Reset Journey")).toBeNull();
+    expect(screen.queryByText("Submit 42% Score")).toBeNull();
+    expect(screen.queryByText("Submit 95% Score")).toBeNull();
+  });
+
+  it("hides dashboard panel when shortcutsOnly is enabled", () => {
     mockStoreState.presenterMode = true;
     mockStoreState.isInitialized = true;
 
-    render(<PresenterControls layout="floating" />);
-    expect(screen.getByText("Simulate 42%")).toBeTruthy();
-    expect(screen.getByText("Simulate 95%")).toBeTruthy();
-    expect(screen.getByText("Fast Forward 3 Days")).toBeTruthy();
-    expect(screen.getByText("Reset journey")).toBeTruthy();
+    const { container } = render(<PresenterControls variant="dashboard" shortcutsOnly />);
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByText("Presenter controls")).toBeNull();
+    expect(screen.queryByText("Hidden simulation shortcuts")).toBeNull();
+    expect(screen.queryByText("Fast Forward 3 Days")).toBeNull();
+  });
+
+  it("keeps Alt+R working when shortcutsOnly hides dashboard panel", () => {
+    mockStoreState.presenterMode = true;
+    mockStoreState.isInitialized = true;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<PresenterControls variant="dashboard" shortcutsOnly />);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { altKey: true, key: "r", bubbles: true }),
+    );
+
+    expect(mockStoreState.resetJourney).toHaveBeenCalled();
+  });
+
+  it("calls resetJourney on Alt+R keyboard shortcut", () => {
+    mockStoreState.presenterMode = true;
+    mockStoreState.isInitialized = true;
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<PresenterControls variant="dashboard" layout="inline" />);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { altKey: true, key: "r", bubbles: true }),
+    );
+
+    expect(mockStoreState.resetJourney).toHaveBeenCalled();
   });
 
   it("dispatches INACTIVITY_TICK when Fast Forward is clicked", () => {
     mockStoreState.presenterMode = true;
     mockStoreState.isInitialized = true;
 
-    render(<PresenterControls layout="floating" />);
+    render(<PresenterControls variant="dashboard" layout="inline" />);
     screen.getByText("Fast Forward 3 Days").click();
 
     expect(mockStoreState.dispatchLearnerEvent).toHaveBeenCalledWith(

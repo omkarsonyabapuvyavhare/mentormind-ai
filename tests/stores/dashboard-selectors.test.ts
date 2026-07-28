@@ -31,7 +31,7 @@ describe("dashboard selectors", () => {
     const state = store.getState();
     const metrics = selectDashboardMetrics(state);
 
-    expect(selectRoadmapCompletion(state)).toBe(68);
+    expect(selectRoadmapCompletion(state).percentage).toBe(69);
     expect(selectCurrentStreak(state)).toBe(demo.initialStreakDays);
     expect(selectNextTask(state)?.id).toBe(demoInitialNextTaskId);
     expect(selectNextTask(state)?.title).toBe("VPC Networking Lab");

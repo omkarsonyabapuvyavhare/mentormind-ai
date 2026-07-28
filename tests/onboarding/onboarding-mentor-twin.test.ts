@@ -153,7 +153,7 @@ describe("onboarding, learning twin, and mentor slice", () => {
     const state = store.getState();
     const response = answerMentorQuestion("how-progressing", state);
 
-    expect(response).toContain(`${selectRoadmapCompletion(state)}%`);
+    expect(response).toContain(`${selectRoadmapCompletion(state).percentage}%`);
     expect(response).toContain(`${state.twin!.consistencyScore}`);
     expect(response).toContain(`${selectCurrentStreak(state)}`);
     expect(response).toContain(`${selectDropoutRisk(state)}`);
@@ -175,7 +175,7 @@ describe("onboarding, learning twin, and mentor slice", () => {
     expect(selectWeakTopics(state)).toHaveLength(0);
     expect(state.decisions).toHaveLength(0);
     expect(state.twin?.currentStreakDays).toBe(demo.initialStreakDays);
-    expect(selectRoadmapCompletion(state)).toBe(68);
+    expect(selectRoadmapCompletion(state).percentage).toBe(69);
     expect(selectNextTask(state)?.id).toBe("task-vpc-lab");
   });
 });

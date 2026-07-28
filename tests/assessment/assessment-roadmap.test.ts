@@ -46,8 +46,12 @@ describe("assessment and roadmap slice", () => {
 
     expect(completedCount).toBe(11);
     expect(totalCount).toBe(16);
-    expect(completion).toBe(68);
-    expect(completion).toBe(Math.floor((completedCount / totalCount) * 100));
+    expect(completion.percentage).toBe(69);
+    expect(completion).toEqual({
+      completedTasks: completedCount,
+      totalTasks: totalCount,
+      percentage: Math.round((completedCount / totalCount) * 100),
+    });
   });
 
   it("B. normal quiz scoring produces the correct percentage", () => {
@@ -253,7 +257,7 @@ describe("assessment and roadmap slice", () => {
     store.getState().resetDemo(START);
 
     const state = store.getState();
-    expect(selectRoadmapCompletion(state)).toBe(68);
+    expect(selectRoadmapCompletion(state).percentage).toBe(69);
     expect(selectInjectedRemedialTaskCount(state)).toBe(0);
     expect(state.roadmap!.version).toBe(demo.initialRoadmapVersion);
     expect(selectWeakTopics(state)).toHaveLength(0);
