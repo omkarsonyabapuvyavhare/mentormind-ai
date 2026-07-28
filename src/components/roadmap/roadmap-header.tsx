@@ -1,16 +1,39 @@
 "use client";
 
 import { format } from "date-fns";
+import { useEffect } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress";
-import { selectRoadmapCompletion } from "@/stores/selectors";
+import { useRoadmapCompletion } from "@/hooks/use-roadmap-completion";
+import { summarizeRoadmapTaskStatuses } from "@/lib/roadmap/complete-roadmap-task";
+import { computeRoadmapCompletion } from "@/stores/selectors";
 import { useAppStore } from "@/stores/use-app-store";
 
 export function RoadmapHeader() {
   const twin = useAppStore((state) => state.twin);
   const roadmap = useAppStore((state) => state.roadmap);
-  const completion = selectRoadmapCompletion(useAppStore());
+  const tasks = useAppStore((state) => state.roadmap?.tasks);
+  const completion = useRoadmapCompletion();
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || !roadmap || !tasks) {
+      return;
+    }
+
+    console.info("[RoadmapCompletion]", {
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        topicId: task.topicId,
+        type: task.type,
+        status: task.status,
+        unlocked: task.unlocked,
+      })),
+      completion: computeRoadmapCompletion(tasks),
+      statusDistribution: summarizeRoadmapTaskStatuses(tasks),
+    });
+  }, [roadmap, tasks]);
 
   if (!twin || !roadmap) {
     return null;
@@ -28,9 +51,15 @@ export function RoadmapHeader() {
         <div>
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="text-muted">Overall completion</span>
-            <span className="font-medium">{completion}%</span>
+            <span className="font-medium">{completion.percentage}%</span>
           </div>
-          <ProgressBar value={completion} />
+          <ProgressBar
+            value={completion.percentage}
+            label="Overall roadmap completion"
+          />
+          <p className="mt-2 text-sm text-muted">
+            {completion.completedTasks} of {completion.totalTasks} tasks completed
+          </p>
         </div>
         <RoadmapVersionBadge version={roadmap.version} />
       </div>

@@ -2,11 +2,13 @@
 
 import { format } from "date-fns";
 import { ArrowDown, ArrowUp, Clock3 } from "lucide-react";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { theme, type MilestoneStatusKey } from "@/constants/theme";
 import { thresholds } from "@/constants/thresholds";
+import { useMilestoneCompletion } from "@/hooks/use-roadmap-completion";
 import {
   selectRoadmapAccelerationDays,
   selectTasksByMilestone,
@@ -27,9 +29,8 @@ export function MilestoneCard({
   tasks: ReturnType<typeof selectTasksByMilestone> extends Map<string, infer T> ? T : never;
   accelerationDays: number | null;
 }) {
-  const completedCount = tasks.filter((task) => task.status === "completed").length;
-  const progress =
-    tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100);
+  const milestoneCompletion = useMilestoneCompletion(tasks);
+  const progress = milestoneCompletion.percentage;
 
   return (
     <GlassCard className={milestone.status === "current" ? "border-cyan-400/30" : undefined}>
@@ -41,6 +42,9 @@ export function MilestoneCard({
           </h3>
           <p className="mt-2 text-sm text-muted">
             Target {format(new Date(milestone.targetDate), "PPP")} · {progress}% complete
+            {milestoneCompletion.totalTasks > 0
+              ? ` · ${milestoneCompletion.completedTasks} of ${milestoneCompletion.totalTasks} tasks`
+              : null}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -73,8 +77,11 @@ export function MilestoneCard({
 
 export function MilestoneTimeline() {
   const roadmap = useAppStore((state) => state.roadmap);
-  const tasksByMilestone = selectTasksByMilestone(useAppStore());
-  const accelerationDays = selectRoadmapAccelerationDays(useAppStore());
+  const tasksByMilestone = useMemo(
+    () => (roadmap ? selectTasksByMilestone({ roadmap }) : new Map()),
+    [roadmap],
+  );
+  const accelerationDays = useAppStore(selectRoadmapAccelerationDays);
 
   if (!roadmap) {
     return null;

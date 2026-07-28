@@ -21,7 +21,7 @@ export function QuizNavigation({
 }) {
   return (
     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <Button variant="secondary" onClick={onPrevious} disabled={!canGoPrevious}>
+      <Button onClick={onPrevious} disabled={!canGoPrevious}>
         Previous
       </Button>
       <div className="flex flex-col gap-3 sm:flex-row">

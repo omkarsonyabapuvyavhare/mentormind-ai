@@ -2,6 +2,11 @@ import type { Decision } from "@/types/decisions";
 import type { Nudge } from "@/types/nudge";
 import type { AppState } from "@/stores/store-types";
 import {
+  resolveActiveAssessmentTopicId,
+  resolveActiveAssessmentTopicName,
+  resolveTopicDisplayName,
+} from "@/lib/learner/resolve-topic-display-name";
+import {
   selectDecisionTransparency,
   selectLatestDecision,
   selectWeakTopics,
@@ -32,7 +37,7 @@ export interface EnrichedNudgeContext {
 }
 
 export function selectLearnerGoalLabel(state: Pick<AppState, "twin">): string {
-  return state.twin?.goal.title ?? "your certification goal";
+  return state.twin?.goal.title ?? "your learning goal";
 }
 
 export function withGoalReference(message: string, goalLabel: string): string {
@@ -67,28 +72,41 @@ export function selectAssessmentReasoningSummary(
   state: AppState,
   score: number,
 ): AssessmentReasoningSummary {
+  const isCertificationGoal = state.twin?.goal.type === "Certification";
   const goalLabel = selectLearnerGoalLabel(state);
   const transparency = selectDecisionTransparency(state);
   const latestDecision = selectLatestDecision(state);
   const weaknesses = selectWeakTopics(state);
-  const weakTopic = weaknesses[0];
+  const activeTopicId = resolveActiveAssessmentTopicId(state);
+  const weakTopic =
+    (activeTopicId
+      ? weaknesses.find((entry) => entry.topicId === activeTopicId)
+      : undefined) ?? weaknesses[0];
+  const activeTopicName = activeTopicId
+    ? resolveTopicDisplayName(state, activeTopicId)
+    : resolveActiveAssessmentTopicName(state);
 
   const signalDetected = transparency?.trigger ?? `Assessment score: ${score}%`;
   let learningTwinUpdate = "Quiz signal stored — learner profile refreshed.";
   let decisionMade = transparency?.whatChanged ?? "No roadmap changes required.";
   let expectedBenefit =
-    transparency?.expectedBenefit ?? "Maintain steady progress toward exam readiness.";
+    transparency?.expectedBenefit ??
+    (isCertificationGoal
+      ? "Maintain steady progress toward exam readiness."
+      : "Maintain steady progress toward practical readiness.");
 
   if (latestDecision?.reasons.includes("QUIZ_BELOW_THRESHOLD") && weakTopic) {
-    learningTwinUpdate = `${weakTopic.topicName} marked weakest at ${weakTopic.score}% — focus area updated.`;
+    learningTwinUpdate = `${activeTopicName} marked weakest at ${weakTopic.score}% — focus area updated.`;
     expectedBenefit = "Close the gap before harder topics so your timeline stays achievable.";
   } else if (latestDecision?.reasons.includes("QUIZ_MASTERY_ACHIEVED")) {
-    learningTwinUpdate = "Topic promoted to strengths — remedial flag cleared.";
-    expectedBenefit = "Skip repetition and advance toward advanced exam domains.";
+    learningTwinUpdate = `${activeTopicName} promoted to strengths — remedial flag cleared.`;
+    expectedBenefit = isCertificationGoal
+      ? "Skip repetition and advance toward advanced exam domains."
+      : "Skip repetition and advance toward advanced learning milestones.";
   } else if (score >= 70) {
     learningTwinUpdate = "Score recorded — retention signal added to your profile.";
   } else if (weakTopic) {
-    learningTwinUpdate = `${weakTopic.topicName} flagged at ${score}% — focus area updated.`;
+    learningTwinUpdate = `${activeTopicName} flagged at ${score}% — focus area updated.`;
   }
 
   if (latestDecision && latestDecision.actions.length === 0) {

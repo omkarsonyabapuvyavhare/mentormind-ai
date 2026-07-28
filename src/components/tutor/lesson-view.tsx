@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, BookOpen, CheckCircle2, Lightbulb, Target } from "lucide-react";
 
@@ -17,15 +17,30 @@ import { theme } from "@/constants/theme";
 import { useGeneratedLesson } from "@/hooks/use-generated-lesson";
 import { useLessonSessionTimer } from "@/hooks/use-lesson-session-timer";
 import { recordLessonRouteRender } from "@/lib/learn/lesson-fetch-timing";
+import { resolveLessonTaskId } from "@/lib/roadmap/complete-roadmap-task";
 import { resolveAssessmentHref } from "@/lib/tutor/mission";
 import { useAppStore } from "@/stores/use-app-store";
 
 export function LessonView({ topicId }: { topicId: string }) {
   const router = useRouter();
   const goalId = useAppStore((state) => state.roadmap?.goalId);
+  const completeTask = useAppStore((state) => state.completeTask);
   const { lesson, loading, error, isHydrated, isInitialized } = useGeneratedLesson(topicId);
   const sessionTimer = useLessonSessionTimer();
   const assessmentHref = resolveAssessmentHref(useAppStore.getState(), topicId);
+
+  const handleStartAssessment = useCallback(() => {
+    if (!assessmentHref) {
+      return;
+    }
+
+    const lessonTaskId = resolveLessonTaskId(useAppStore.getState().roadmap, topicId);
+    if (lessonTaskId) {
+      completeTask(lessonTaskId, new Date().toISOString());
+    }
+
+    router.push(assessmentHref);
+  }, [assessmentHref, completeTask, router, topicId]);
 
   useEffect(() => {
     if (isHydrated && isInitialized) {
@@ -178,7 +193,7 @@ export function LessonView({ topicId }: { topicId: string }) {
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
           {assessmentHref ? (
-            <Button size="lg" onClick={() => router.push(assessmentHref)}>
+            <Button size="lg" onClick={handleStartAssessment}>
               Start topic check-in
               <ArrowRight className="h-4 w-4" />
             </Button>

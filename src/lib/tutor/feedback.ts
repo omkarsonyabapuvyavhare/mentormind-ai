@@ -1,4 +1,3 @@
-import { getTopicName } from "@/lib/engine/helpers";
 import type { AdaptationRevealKind } from "@/types/ui-state";
 import type { AppState } from "@/stores/store-types";
 import {
@@ -7,6 +6,11 @@ import {
   selectLatestDecision,
   selectWeakTopics,
 } from "@/stores/selectors";
+import {
+  resolveActiveAssessmentTopicId,
+  resolveActiveAssessmentTopicName,
+  resolveTopicDisplayName,
+} from "@/lib/learner/resolve-topic-display-name";
 import { selectLearnerGoalLabel, withGoalReference } from "@/lib/ai/reasoning-summary";
 
 export interface MentorFeedback {
@@ -26,8 +30,12 @@ export function selectMentorFeedback(
   const transparency = selectDecisionTransparency(state);
   const latestDecision = selectLatestDecision(state);
   const weaknesses = selectWeakTopics(state);
-  const weakTopic = weaknesses[0];
+  const weakTopic = weaknesses.find(
+    (entry) => entry.topicId === resolveActiveAssessmentTopicId(state),
+  );
   const learnerGoal = selectLearnerGoalLabel(state);
+  const goalType = state.twin?.goal.type ?? "Skill";
+  const activeTopicName = resolveActiveAssessmentTopicName(state);
 
   if (kind === "mastery") {
     return {
@@ -35,7 +43,9 @@ export function selectMentorFeedback(
       score,
       headline: "Excellent work — you demonstrated mastery.",
       reassurance: withGoalReference(
-        "This is exactly the progress that accelerates your certification timeline",
+        goalType === "Certification"
+          ? "This is exactly the progress that accelerates your certification timeline"
+          : "This is exactly the progress that accelerates your learning timeline",
         learnerGoal,
       ),
       explanation:
@@ -57,7 +67,7 @@ export function selectMentorFeedback(
       ),
       explanation:
         weakTopic
-          ? `${weakTopic.topicName} gap at ${weakTopic.score}%. ${selectAdaptationMessage(state)} ${withGoalReference("Remediation protects your timeline", learnerGoal)}`
+          ? `${activeTopicName} gap at ${weakTopic.score}%. ${selectAdaptationMessage(state)} ${withGoalReference("Remediation protects your timeline", learnerGoal)}`
           : withGoalReference(selectAdaptationMessage(state), learnerGoal),
       nextStepHint: withGoalReference("I added targeted practice — let's review what changed", learnerGoal),
     };
@@ -82,36 +92,54 @@ export function selectPlanUpdateSummary(state: AppState, kind: AdaptationRevealK
   highlights: string[];
 } {
   const transparency = selectDecisionTransparency(state);
-  const weaknesses = selectWeakTopics(state);
   const learnerGoal = selectLearnerGoalLabel(state);
+  const goalType = state.twin?.goal.type ?? "Skill";
+  const goalCategory = state.twin?.goal.category ?? "General Technology";
+  const activeTopicId = resolveActiveAssessmentTopicId(state);
+  const activeTopicName = activeTopicId
+    ? resolveTopicDisplayName(state, activeTopicId)
+    : resolveActiveAssessmentTopicName(state);
+  const goalFocus = extractGoalFocusLabel(learnerGoal, goalCategory);
 
   if (kind === "mastery") {
+    const body =
+      goalType === "Certification"
+        ? "Strengthens retention and prepares you for upcoming exam milestones."
+        : "Strengthens retention and prepares you for the next learning milestone.";
+    const advancedHighlight =
+      goalType === "Certification"
+        ? "Advanced content unlocked toward your exam"
+        : goalFocus
+          ? `Advanced ${goalFocus} content unlocked`
+          : "Advanced content unlocked toward your learning goal";
+
     return {
       title: "Your plan just accelerated",
-      body: withGoalReference(
-        transparency?.expectedBenefit ?? "Remedial work removed — advanced content unlocked",
-        learnerGoal,
-      ),
+      body: withGoalReference(transparency?.expectedBenefit ?? body, learnerGoal),
       highlights: [
         "Remedial tasks removed from your roadmap",
-        withGoalReference("Advanced content unlocked toward your exam", learnerGoal),
-        `${getTopicName("vpc-networking")} moved to your strengths`,
+        withGoalReference(advancedHighlight, learnerGoal),
+        `${activeTopicName} moved to your strengths`,
       ],
     };
   }
 
   if (kind === "weakness") {
-    const topic = weaknesses[0]?.topicName ?? "this topic";
+    const timelineCopy =
+      goalType === "Certification"
+        ? "Timeline adjusted to protect your certification goal"
+        : "Timeline adjusted to protect your learning goal";
+
     return {
       title: "Your plan now includes targeted support",
       body: withGoalReference(
-        transparency?.expectedBenefit ?? `Extra practice for ${topic} before you advance`,
+        transparency?.expectedBenefit ?? `Extra practice for ${activeTopicName} before you advance`,
         learnerGoal,
       ),
       highlights: [
-        `Revision tasks added for ${topic}`,
+        `Revision tasks added for ${activeTopicName}`,
         "Learning Twin updated with your quiz signal",
-        withGoalReference("Timeline adjusted to protect your certification goal", learnerGoal),
+        withGoalReference(timelineCopy, learnerGoal),
       ],
     };
   }
@@ -124,4 +152,26 @@ export function selectPlanUpdateSummary(state: AppState, kind: AdaptationRevealK
       "Roadmap version updated",
     ],
   };
+}
+
+function extractGoalFocusLabel(goalLabel: string, goalCategory: string): string | null {
+  const normalized = goalLabel
+    .replace(/^i\s+(want|would like)\s+to\s+/i, "")
+    .replace(/^learn\s+/i, "")
+    .replace(/\bin\s+\d+\s+(day|days|week|weeks|month|months)\b.*$/i, "")
+    .trim();
+
+  if (normalized) {
+    const first = normalized.split(/\s+/)[0];
+    if (first) {
+      return first.charAt(0).toUpperCase() + first.slice(1);
+    }
+  }
+
+  if (goalCategory && goalCategory !== "Unknown" && goalCategory !== "General Technology") {
+    const categoryFocus = goalCategory.split("/")[0]?.trim();
+    return categoryFocus || null;
+  }
+
+  return null;
 }

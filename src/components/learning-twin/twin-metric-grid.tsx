@@ -1,17 +1,20 @@
 "use client";
 
 import { StatCard } from "@/components/shared/stat-card";
+import { useRoadmapCompletion } from "@/hooks/use-roadmap-completion";
 import {
   selectCurrentStreak,
   selectDropoutRisk,
   selectDropoutRiskLevel,
-  selectRoadmapCompletion,
 } from "@/stores/selectors";
 import { useAppStore } from "@/stores/use-app-store";
 
 export function TwinMetricGrid() {
-  const state = useAppStore();
-  const twin = state.twin;
+  const twin = useAppStore((state) => state.twin);
+  const completion = useRoadmapCompletion();
+  const streak = useAppStore(selectCurrentStreak);
+  const dropoutRisk = useAppStore(selectDropoutRisk);
+  const dropoutRiskLevel = useAppStore(selectDropoutRiskLevel);
 
   if (!twin) {
     return null;
@@ -20,13 +23,13 @@ export function TwinMetricGrid() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label="Consistency" value={`${twin.consistencyScore}%`} />
-      <StatCard label="Current streak" value={`${selectCurrentStreak(state)} days`} />
+      <StatCard label="Current streak" value={`${streak} days`} />
       <StatCard
         label="Dropout risk"
-        value={`${selectDropoutRisk(state)} (${selectDropoutRiskLevel(state)})`}
+        value={`${dropoutRisk} (${dropoutRiskLevel})`}
       />
       <StatCard label="Learning velocity" value={twin.learningVelocity.toFixed(1)} />
-      <StatCard label="Roadmap completion" value={`${selectRoadmapCompletion(state)}%`} />
+      <StatCard label="Roadmap completion" value={`${completion.percentage}%`} />
       <StatCard label="Inactivity" value={`${twin.inactivityDays} days`} />
       <StatCard
         label="Study logged"

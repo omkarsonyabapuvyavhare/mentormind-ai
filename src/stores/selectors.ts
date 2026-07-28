@@ -6,7 +6,7 @@ import {
   demoNoWeaknessMessage,
   demoStepCount,
 } from "@/constants/demo";
-import { getTopicName } from "@/lib/engine/helpers";
+import { resolveTopicDisplayName } from "@/lib/learner/resolve-topic-display-name";
 import {
   buildDecisionTransparency,
   summarizeInactivityChanges,
@@ -17,18 +17,57 @@ import {
 import type { AppState } from "@/stores/store-types";
 import type { Decision, DecisionAction } from "@/types/decisions";
 import type { QuizCompletedEvent } from "@/types/events";
-import type { LearningTask, Milestone } from "@/types/roadmap";
+import type { LearningTask, Milestone, TaskType } from "@/types/roadmap";
 import { thresholds } from "@/constants/thresholds";
 
 export type DropoutRiskLevel = "low" | "medium" | "high";
 
-export function selectRoadmapCompletion(state: Pick<AppState, "roadmap">): number {
+export interface RoadmapCompletion {
+  completedTasks: number;
+  totalTasks: number;
+  percentage: number;
+}
+
+const COUNTABLE_TASK_TYPES = new Set<TaskType>([
+  "lesson",
+  "quiz",
+  "lab",
+  "revision",
+  "review",
+]);
+
+/** Tasks that count toward overall roadmap completion. */
+export function selectCountableRoadmapTasks(tasks: LearningTask[]): LearningTask[] {
+  return tasks.filter(
+    (task) => COUNTABLE_TASK_TYPES.has(task.type) && task.status !== "skipped",
+  );
+}
+
+export function computeRoadmapCompletion(tasks: LearningTask[]): RoadmapCompletion {
+  const countable = selectCountableRoadmapTasks(tasks);
+  const totalTasks = countable.length;
+  const completedTasks = Math.min(
+    countable.filter((task) => task.status === "completed").length,
+    totalTasks,
+  );
+  const percentage =
+    totalTasks === 0
+      ? 0
+      : Math.min(100, Math.max(0, Math.round((completedTasks / totalTasks) * 100)));
+
+  return { completedTasks, totalTasks, percentage };
+}
+
+export function selectRoadmapCompletion(state: Pick<AppState, "roadmap">): RoadmapCompletion {
   if (!state.roadmap || state.roadmap.tasks.length === 0) {
-    return 0;
+    return { completedTasks: 0, totalTasks: 0, percentage: 0 };
   }
 
-  const completedCount = state.roadmap.tasks.filter((task) => task.status === "completed").length;
-  return Math.floor((completedCount / state.roadmap.tasks.length) * 100);
+  return computeRoadmapCompletion(state.roadmap.tasks);
+}
+
+export function selectMilestoneCompletion(tasks: LearningTask[]): RoadmapCompletion {
+  return computeRoadmapCompletion(tasks);
 }
 
 export function selectCurrentStreak(state: Pick<AppState, "twin">): number {
@@ -198,14 +237,23 @@ export function selectMentorRecommendation(
 
   const nextTask = selectNextTask(state);
   if (nextTask?.id === demoInitialNextTaskId) {
-    return demoInitialRecommendation;
+    if (state.twin?.goal.type === "Certification") {
+      return demoInitialRecommendation;
+    }
+    return `Prioritize ${nextTask.title} today to keep momentum on your learning goal.`;
   }
 
   if (nextTask) {
-    return `Prioritize ${nextTask.title} today to stay on track for your certification goal.`;
+    const goalPhrase =
+      state.twin?.goal.type === "Certification" ? "certification goal" : "learning goal";
+    return `Prioritize ${nextTask.title} today to stay on track for your ${goalPhrase}.`;
   }
 
-  return demoInitialRecommendation;
+  if (state.twin?.goal.type === "Certification") {
+    return "Review your next unlocked task to stay on track for your certification goal.";
+  }
+
+  return "Review your next unlocked task to stay on track for your learning goal.";
 }
 
 export function selectAdaptationMessage(state: Pick<AppState, "decisions">): string {
@@ -314,7 +362,7 @@ function applyActionToSummary(action: DecisionAction, summary: DecisionActionSum
 }
 
 export function selectDecisionTransparency(
-  state: Pick<AppState, "decisions" | "learnerEvents" | "twin">,
+  state: Pick<AppState, "decisions" | "learnerEvents" | "twin" | "roadmap">,
   decision = selectLatestDecision(state),
 ): DecisionTransparency | null {
   if (!decision) {
@@ -323,20 +371,27 @@ export function selectDecisionTransparency(
 
   const summary = summarizeDecisionActions(decision);
   const lastQuiz = selectLastQuizEvent(state);
-  const trigger = buildTriggerLabel(decision, lastQuiz, state.twin?.inactivityDays);
+  const trigger = buildTriggerLabel(state, decision, lastQuiz, state.twin?.inactivityDays);
   const whatChanged = buildWhatChangedLabel(decision, summary);
   const why = decision.explanation.split(".")[0] ?? decision.explanation;
 
-  return buildDecisionTransparency(trigger, whatChanged, why, decision.reasons);
+  return buildDecisionTransparency(
+    trigger,
+    whatChanged,
+    why,
+    decision.reasons,
+    state.twin?.goal.type ?? "Skill",
+  );
 }
 
 function buildTriggerLabel(
+  state: Pick<AppState, "twin" | "roadmap">,
   decision: Decision,
   lastQuiz: QuizCompletedEvent | null,
   inactivityDays?: number,
 ): string {
   if (decision.eventType === "QUIZ_COMPLETED" && lastQuiz) {
-    const topicName = getTopicName(lastQuiz.topicId);
+    const topicName = resolveTopicDisplayName(state, lastQuiz.topicId);
     return `${topicName} quiz score: ${lastQuiz.score}%`;
   }
 

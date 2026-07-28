@@ -1,6 +1,9 @@
 import { demoInitialRecommendation } from "@/constants/demo";
 import { PAGE_QUESTIONS } from "@/constants/mentor-voice";
-import { getTopicName } from "@/lib/engine/helpers";
+import {
+  resolveActiveAssessmentTopicId,
+  resolveTopicDisplayName,
+} from "@/lib/learner/resolve-topic-display-name";
 import { selectNextBestAction } from "@/lib/ai/mentor-responses";
 import type { AppState } from "@/stores/store-types";
 import {
@@ -21,17 +24,31 @@ export interface MentorInsight {
   expectedBenefit: string;
 }
 
+function isCertificationGoal(state: AppState): boolean {
+  return state.twin?.goal.type === "Certification";
+}
+
+function goalPhrase(state: AppState): string {
+  return isCertificationGoal(state) ? "certification goal" : "learning goal";
+}
+
+function resolveInsightTopicName(state: AppState, topicId: string): string {
+  return resolveTopicDisplayName(state, topicId);
+}
+
 function baselineDashboardInsight(state: AppState): MentorInsight {
   const nextTask = selectNextTask(state);
   const milestone = selectCurrentMilestone(state);
+  const topicLabel = nextTask ? resolveInsightTopicName(state, nextTask.topicId) : "your next topic";
+  const goalTypePhrase = goalPhrase(state);
 
   return {
     question: PAGE_QUESTIONS.dashboard,
     what: nextTask ? `Complete ${nextTask.title}` : "Review your next unlocked task",
-    why: "VPC Networking is a prerequisite for upcoming cloud architecture milestones.",
+    why: `This keeps your progress grounded in ${topicLabel} before your next milestone.`,
     expectedBenefit: milestone
-      ? `Stay on track for ${milestone.title.replace(/^Week \d+ — /, "")} and keep your certification timeline achievable.`
-      : "Maintain momentum toward your AWS certification goal.",
+      ? `Stay on track for ${milestone.title.replace(/^Week \d+ — /, "")} and maintain momentum toward your ${goalTypePhrase}.`
+      : `Maintain momentum toward your ${goalTypePhrase}.`,
   };
 }
 
@@ -77,7 +94,7 @@ export function selectDashboardPageInsight(state: AppState): MentorInsight {
       why: latestDecision.explanation,
       expectedBenefit:
         nudge?.body ??
-        "Rebuild consistency before dropout risk rises and your certification timeline slips.",
+        `Rebuild consistency before dropout risk rises and your ${goalPhrase(state)} loses momentum.`,
     };
   }
 
@@ -108,25 +125,32 @@ export function selectRoadmapPageInsight(state: AppState): MentorInsight {
 
   return {
     question: PAGE_QUESTIONS.roadmap,
-    what: "Your plan follows your AWS certification goal across eight structured weeks",
+    what: `Your plan follows your ${goalPhrase(state)} across structured milestones`,
     why: "MentorMind built this roadmap from your goal, availability, and Learning Twin profile. It updates when new learner signals arrive.",
     expectedBenefit:
-      "Every task has a purpose in the chain — prerequisites first, then advanced architecture topics.",
+      "Every task has a purpose in sequence — foundations first, then higher-complexity work.",
   };
 }
 
 export function selectAssessmentPageInsight(
   state: AppState,
-  topicId = "vpc-networking",
-  topicTitle = "VPC Networking",
+  topicId?: string,
+  topicTitle?: string,
 ): MentorInsight {
-  const weakness = selectWeakTopics(state).find((topic) => topic.topicId === topicId);
-  const strength = state.twin?.strengths.find((topic) => topic.topicId === topicId);
+  const inferredTopicId =
+    topicId ?? selectNextTask(state)?.topicId ?? resolveActiveAssessmentTopicId(state) ?? "";
+  const resolvedTopicTitle =
+    topicTitle ?? (inferredTopicId ? resolveInsightTopicName(state, inferredTopicId) : "today's topic");
+  const weakness = selectWeakTopics(state).find((topic) => topic.topicId === inferredTopicId);
+  const strength = state.twin?.strengths.find((topic) => topic.topicId === inferredTopicId);
+  const masteryBenefit = isCertificationGoal(state)
+    ? "Strong recovery removes remedial tasks and can accelerate your certification timeline."
+    : "Strong recovery removes remedial tasks and can unlock your next milestone sooner.";
 
   if (strength) {
     return {
       question: PAGE_QUESTIONS.assessment,
-      what: `Retake the ${topicTitle} assessment to confirm mastery`,
+      what: `Retake the ${resolvedTopicTitle} assessment to confirm mastery`,
       why: `You recently demonstrated mastery at ${strength.score}%. MentorMind uses retakes to keep your profile accurate.`,
       expectedBenefit: "Sustained high scores keep remedial work removed and advanced content unlocked.",
     };
@@ -135,15 +159,15 @@ export function selectAssessmentPageInsight(
   if (weakness) {
     return {
       question: PAGE_QUESTIONS.assessment,
-      what: `Retake the ${topicTitle} assessment after remediation`,
+      what: `Retake the ${resolvedTopicTitle} assessment after remediation`,
       why: `A prior score of ${weakness.score}% flagged this topic. MentorMind needs a new signal to adjust your roadmap.`,
-      expectedBenefit: "Strong recovery removes remedial tasks and can accelerate your certification timeline.",
+      expectedBenefit: masteryBenefit,
     };
   }
 
   return {
     question: PAGE_QUESTIONS.assessment,
-    what: `Take the ${topicTitle} assessment`,
+    what: `Take the ${resolvedTopicTitle} assessment`,
     why: "This helps MentorMind understand your strengths and weaknesses so it can personalize your roadmap.",
     expectedBenefit:
       "Your score becomes a learner signal that can trigger targeted remediation or unlock the next milestone.",
@@ -168,7 +192,7 @@ export function selectLearningTwinPageInsight(state: AppState): MentorInsight {
 
   return {
     question: PAGE_QUESTIONS.learningTwin,
-    what: `I remember your ${twin.goal.examCode ?? "certification"} goal, ${twin.currentStreakDays}-day streak, and performance in ${strengths}`,
+    what: `I remember your ${goalPhrase(state)}, ${twin.currentStreakDays}-day streak, and performance in ${strengths}`,
     why: `I also track weaknesses (${weaknesses}), ${twin.preferences.studyTimeOfDay} study preference, and every quiz you complete.`,
     expectedBenefit:
       strongest
@@ -208,12 +232,12 @@ export function selectMentorPageInsight(state: AppState): MentorInsight {
     what: selectNextBestAction(state),
     why: selectMentorRecommendation(state),
     expectedBenefit: nextTask
-      ? `Estimated effort: ${nextTask.estimatedMinutes} minutes toward your certification goal.`
-      : "Stay aligned with your AWS certification roadmap.",
+      ? `Estimated effort: ${nextTask.estimatedMinutes} minutes toward your ${goalPhrase(state)}.`
+      : `Stay aligned with your ${goalPhrase(state)}.`,
   };
 }
 
 export function selectAssessmentTopicInsight(state: AppState, topicId: string): MentorInsight {
-  const topicName = getTopicName(topicId);
+  const topicName = resolveInsightTopicName(state, topicId);
   return selectAssessmentPageInsight(state, topicId, topicName);
 }

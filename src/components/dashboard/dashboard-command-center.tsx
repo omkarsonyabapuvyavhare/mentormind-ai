@@ -3,6 +3,7 @@
 import { LearnerEngagementPanel } from "@/components/dashboard/learner-engagement-panel";
 import { DashboardLiveClock } from "@/components/dashboard/dashboard-live-clock";
 import { AccountabilityPartnerCard } from "@/components/shared/accountability-partner-card";
+import { PresenterControls } from "@/components/presenter/presenter-controls";
 import { TutorFlowStepper } from "@/components/tutor/tutor-flow-stepper";
 import { MentorMissionCard } from "@/components/tutor/mentor-mission-card";
 import { useLessonPrefetch } from "@/hooks/use-lesson-prefetch";
@@ -23,6 +24,7 @@ export function DashboardCommandCenter() {
       {partner ? <AccountabilityPartnerCard message={partner} onAction={handlePartnerAction} /> : null}
       <MentorMissionCard />
       <LearnerEngagementPanel />
+      <PresenterControls variant="dashboard" shortcutsOnly />
     </div>
   );
 }

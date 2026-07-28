@@ -1,17 +1,20 @@
 "use client";
 
 import { GlassCard } from "@/components/ui/glass-card";
+import { useRoadmapCompletion } from "@/hooks/use-roadmap-completion";
 import {
   selectCurrentStreak,
   selectDropoutRiskLevel,
-  selectRoadmapCompletion,
-  selectWeakTopics,
 } from "@/stores/selectors";
 import { useAppStore } from "@/stores/use-app-store";
 
 export function LearnerContextPanel() {
-  const state = useAppStore();
-  const twin = state.twin;
+  const twin = useAppStore((state) => state.twin);
+  const roadmapVersion = useAppStore((state) => state.roadmap?.version ?? 1);
+  const completion = useRoadmapCompletion();
+  const streak = useAppStore(selectCurrentStreak);
+  const riskLevel = useAppStore(selectDropoutRiskLevel);
+  const weaknesses = twin?.weaknesses ?? [];
 
   if (!twin) {
     return null;
@@ -23,18 +26,16 @@ export function LearnerContextPanel() {
       <dl className="mt-4 grid gap-3 text-sm">
         <ContextItem label="Goal" value={twin.goal.title} />
         <ContextItem label="Skill level" value={twin.skillLevel} />
-        <ContextItem label="Completion" value={`${selectRoadmapCompletion(state)}%`} />
-        <ContextItem label="Streak" value={`${selectCurrentStreak(state)} days`} />
-        <ContextItem label="Risk level" value={selectDropoutRiskLevel(state)} />
+        <ContextItem label="Completion" value={`${completion.percentage}%`} />
+        <ContextItem label="Streak" value={`${streak} days`} />
+        <ContextItem label="Risk level" value={riskLevel} />
         <ContextItem
           label="Weak topics"
           value={
-            selectWeakTopics(state)
-              .map((topic) => topic.topicName)
-              .join(", ") || "None confirmed"
+            weaknesses.map((topic) => topic.topicName).join(", ") || "None confirmed"
           }
         />
-        <ContextItem label="Roadmap version" value={`v${state.roadmap?.version ?? 1}`} />
+        <ContextItem label="Roadmap version" value={`v${roadmapVersion}`} />
       </dl>
     </GlassCard>
   );

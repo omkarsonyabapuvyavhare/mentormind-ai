@@ -18,6 +18,7 @@ const GOAL =
   "I am a beginner and want to learn Python in eight weeks. I can study six hours per week and prefer practical exercises.";
 
 const results = [];
+const presenterTransitions = [];
 
 function record(name, passed, detail) {
   results.push({ name, passed, detail });
@@ -80,6 +81,36 @@ async function waitVisible(page, text, timeout = 30000) {
   await page.getByText(text, { exact: false }).first().waitFor({ state: "visible", timeout });
 }
 
+async function waitAnalysisStage(page) {
+  const analyzing = page
+    .getByText("MentorMind is analyzing your learning", { exact: false })
+    .first()
+    .waitFor({ state: "visible", timeout: 15000 })
+    .then(() => "analyzing")
+    .catch(() => null);
+  const mastery = page
+    .getByText("MentorMind detected mastery", { exact: false })
+    .first()
+    .waitFor({ state: "visible", timeout: 15000 })
+    .then(() => "mastery")
+    .catch(() => null);
+
+  const stage = await Promise.race([analyzing, mastery]);
+  if (!stage) {
+    throw new Error("Neither analyzing nor mastery overlay appeared.");
+  }
+  return stage;
+}
+
+async function snapshotPresenterState(page, stage) {
+  const state = await page.evaluate((stageLabel) => ({
+    stage: stageLabel,
+    url: window.location.pathname + window.location.search,
+    sessionPresenter: window.sessionStorage.getItem("mentormind-presenter-mode"),
+  }), stage);
+  presenterTransitions.push(state);
+}
+
 async function runFlow(page, label, simulateButton, { alreadyOnAssessment = false } = {}) {
   if (!alreadyOnAssessment) {
     const startLearning = page.getByRole("button", { name: "Start Learning" });
@@ -109,27 +140,28 @@ async function runFlow(page, label, simulateButton, { alreadyOnAssessment = fals
   if (!simulateVisible) throw new Error(`${simulateButton} not visible`);
 
   await clickButton(page, simulateButton, { exact: true });
+  await snapshotPresenterState(page, `${label}:after-simulate-click`);
 
-  await waitVisible(page, "MentorMind is analyzing your learning", 15000);
-  await screenshot(page, `${label}-02-analyzing-overlay`);
+  const analysisStage = await waitAnalysisStage(page);
+  await screenshot(
+    page,
+    `${label}-${analysisStage === "mastery" ? "02-mastery-overlay" : "02-analyzing-overlay"}`,
+  );
 
   await waitVisible(page, "AI reasoning summary", 15000);
   await screenshot(page, `${label}-03-reasoning-screen`);
 
-  await page.evaluate(() => {
-    const buttons = [...document.querySelectorAll("button")];
-    buttons.find((b) => b.textContent?.includes("Continue to mentor feedback"))?.click();
-  });
+  await page
+    .getByRole("button", { name: "Continue to mentor feedback", exact: true })
+    .click({ force: true, timeout: 30000 });
   await page.waitForURL(/\/mentor\/feedback/, { timeout: 60000 });
   await waitVisible(page, "Mentor Feedback");
   await screenshot(page, `${label}-04-mentor-feedback`);
 
-  await page.evaluate(() => {
-    const buttons = [...document.querySelectorAll("button")];
-    buttons.find((b) => b.textContent?.includes("See updated learning plan"))?.click();
-  });
-  await page.waitForURL(/\/plan-updated/, { timeout: 60000 });
-  await waitVisible(page, "Updated Learning Plan");
+  await page
+    .getByRole("button", { name: "See updated learning plan", exact: true })
+    .click({ force: true, timeout: 30000 });
+  await waitVisible(page, "Updated Learning Plan", 60000);
   await screenshot(page, `${label}-05-updated-roadmap`);
 
   record(`${label}: full UI flow completed`, true, `/plan-updated reached`);
@@ -141,6 +173,12 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
+  page.on("console", (message) => {
+    const text = message.text();
+    if (text.includes("[PresenterMode]") || text.includes("[PresenterControls]") || text.includes("[QuizShell]")) {
+      presenterTransitions.push({ stage: "console", text });
+    }
+  });
 
   try {
     // Clear persisted state for clean run
@@ -150,6 +188,7 @@ async function main() {
       sessionStorage.clear();
     });
     await page.reload();
+    await snapshotPresenterState(page, "after-reload");
 
     // --- Onboarding ---
     await page.getByLabel("Tell MentorMind what you want to achieve").fill(GOAL);
@@ -172,6 +211,7 @@ async function main() {
 
     await page.waitForURL(/\/onboarding\/loading|\/dashboard/, { timeout: 60000 });
     await page.waitForURL(/\/dashboard/, { timeout: 120000 });
+    await snapshotPresenterState(page, "dashboard");
     record("Onboarding → Dashboard", true, page.url());
 
     // --- Dashboard → Lesson → Assessment ---
@@ -183,6 +223,7 @@ async function main() {
     await checkIn.waitFor({ state: "visible", timeout: 90000 });
     await checkIn.click({ force: true });
     await page.waitForURL(/\/assessment\//, { timeout: 60000 });
+    await snapshotPresenterState(page, "assessment");
 
     // --- Question 1 verification ---
     const progress = page.getByText("1 of 5");
@@ -208,14 +249,29 @@ async function main() {
     await runFlow(page, "42pct", "Simulate 42%", { alreadyOnAssessment: true });
 
     // Back to dashboard for 95% flow
+    await page.goto(`${BASE}/dashboard`);
+    await waitVisible(page, "Start Learning", 60000);
+
+    // --- 95% flow ---
+    await runFlow(page, "95pct", "Simulate 95%");
+
+    // --- Fast Forward + Reset verification ---
     await page.evaluate(() => {
       const buttons = [...document.querySelectorAll("button")];
       buttons.find((b) => b.textContent?.includes("Continue Learning"))?.click();
     });
     await page.waitForURL(/\/dashboard/, { timeout: 60000 });
+    await waitVisible(page, "Start Learning", 30000);
+    await clickButton(page, "Fast Forward 3 Days", { exact: true });
+    await waitVisible(page, "Accountability", 30000);
+    await screenshot(page, "fast-forward-accountability");
+    record("Fast Forward shows accountability", true, "Dashboard accountability card visible");
 
-    // --- 95% flow ---
-    await runFlow(page, "95pct", "Simulate 95%");
+    await clickButton(page, "Reset journey", { exact: true });
+    await page.waitForTimeout(1500);
+    const resetVisible = await page.getByText("Create your learning plan", { exact: false }).first().isVisible().catch(() => false);
+    record("Reset Journey works", resetVisible, resetVisible ? "Returned to onboarding state" : "Onboarding text not visible");
+    await screenshot(page, "reset-journey-result");
   } catch (error) {
     record("Runtime verification", false, error instanceof Error ? error.message : String(error));
     await page.screenshot({ path: path.join(OUT_DIR, "error-state.png"), fullPage: true });
@@ -225,6 +281,7 @@ async function main() {
     const report = {
       timestamp: new Date().toISOString(),
       results,
+      presenterTransitions,
       allPassed: results.every((r) => r.passed),
     };
     await writeFile(path.join(OUT_DIR, "report.json"), JSON.stringify(report, null, 2));

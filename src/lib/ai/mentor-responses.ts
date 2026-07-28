@@ -113,7 +113,7 @@ function answerHowProgressing(state: AppState): string {
   const latestQuiz = state.twin?.quizHistory[state.twin.quizHistory.length - 1];
 
   const lines = [
-    `Overall roadmap completion: ${completion}%.`,
+    `Overall roadmap completion: ${completion.percentage}% (${completion.completedTasks} of ${completion.totalTasks} tasks).`,
     `Consistency score: ${consistency}.`,
     `Current streak: ${streak} day${streak === 1 ? "" : "s"}.`,
     `Dropout risk: ${risk} (${riskLevel}).`,

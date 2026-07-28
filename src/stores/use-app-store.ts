@@ -7,6 +7,9 @@ import { logDecisionEngineResult } from "@/lib/dev/architecture-log";
 import { applyEngineResult } from "@/lib/engine/apply";
 import { evaluate } from "@/lib/engine/index";
 import {
+  applyQuizSubmissionTaskCompletion,
+} from "@/lib/roadmap/complete-roadmap-task";
+import {
   createDemoTwin,
   generateDemoRoadmap,
 } from "@/lib/roadmap/generate-initial";
@@ -186,13 +189,24 @@ export function createAppStoreSlice(
     };
 
     try {
+      const activeRoadmap =
+        roadmapOverride ??
+        (snapshot.roadmap && event.type === "QUIZ_COMPLETED"
+          ? applyQuizSubmissionTaskCompletion(snapshot.roadmap, event.topicId)
+          : snapshot.roadmap);
+
       const context = buildEngineContext({
         ...snapshot,
-        roadmap: roadmapOverride ?? snapshot.roadmap,
+        roadmap: activeRoadmap,
       });
       const result = evaluate(normalizedEvent, context);
       logDecisionEngineResult(normalizedEvent, result);
-      const nextState = mergeEngineResultIntoState(snapshot, normalizedEvent, result, roadmapOverride);
+      const nextState = mergeEngineResultIntoState(
+        snapshot,
+        normalizedEvent,
+        result,
+        activeRoadmap ?? undefined,
+      );
 
       set({
         twin: nextState.twin,

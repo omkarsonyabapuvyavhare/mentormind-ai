@@ -51,6 +51,8 @@ export function QuizShell({ assessment }: { assessment: TopicAssessment }) {
   const dispatchLearnerEvent = useAppStore((state) => state.dispatchLearnerEvent);
   const showAdaptationReveal = useAppStore((state) => state.showAdaptationReveal);
   const presenterMode = useAppStore((state) => state.presenterMode);
+  const envPresenterMode = process.env.NEXT_PUBLIC_PRESENTER_MODE === "true";
+  const showInlinePresenterControls = envPresenterMode || presenterMode;
   const lastError = useAppStore((state) => state.lastError);
 
   const storeState = useAppStore();
@@ -72,12 +74,12 @@ export function QuizShell({ assessment }: { assessment: TopicAssessment }) {
     }
 
     console.info("[QuizShell]", {
-      shouldRenderPresenterControls: presenterMode,
+      shouldRenderPresenterControls: showInlinePresenterControls,
       hasAssessment: Boolean(assessment),
       phase,
       questionCount: assessment.questions.length,
     });
-  }, [assessment, phase, presenterMode]);
+  }, [assessment, phase, showInlinePresenterControls]);
 
   const finishAnalysis = useCallback(() => {
     setPhase("reasoning");
@@ -286,6 +288,7 @@ export function QuizShell({ assessment }: { assessment: TopicAssessment }) {
       />
 
       <PresenterControls
+        variant="assessment"
         layout="inline"
         assessment={assessment}
         disabled={isSubmitting}
