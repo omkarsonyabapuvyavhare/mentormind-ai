@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGeminiGenerateContent = vi.hoisted(() => vi.fn());
@@ -15,7 +15,10 @@ import { POST } from "@/app/api/learn/generate-lesson/route";
 import { containsAwsSpecificTopic } from "@/lib/ai/roadmap-schema";
 import {
   aiLessonResponseSchema,
+  containsGenericLessonPhrases,
+  containsLessonMetaLanguage,
   knowledgeCheckSchema,
+  validateAiLessonStructure,
 } from "@/lib/ai/lesson-schema";
 import {
   createDeterministicLessonForLearner,
@@ -27,6 +30,8 @@ import {
   writeCachedLesson,
 } from "@/lib/learn/lesson-session-cache";
 import type { GenerateLessonRequest } from "@/lib/learn/generate-lesson-request-schema";
+import { buildMentorLessonFixture } from "../helpers/mentor-lesson-fixture";
+import { mentorSectionHeadings } from "@/lib/ai/lesson-mentor-fallback";
 
 const baseInput: GenerateLessonRequest = {
   goalId: "aws-saa-c03",
@@ -65,85 +70,172 @@ const kubernetesInput: GenerateLessonRequest = {
   skillLevel: "intermediate",
 };
 
-function validLesson(title: string) {
-  const knowledgeCheck = (question: string, conceptTag: string) => ({
-    question,
-    options: [
-      "Apply the concept in practice",
-      "Use invalid syntax for this concept",
-      "Confuse this with an unrelated feature",
-      "Skip validating the result",
-    ] as [string, string, string, string],
-    correctIndex: 0,
-    explanation: "Practice reinforces the lesson objective.",
-    conceptTag,
-  });
+const pythonInput: GenerateLessonRequest = {
+  ...baseInput,
+  goalId: "learn-python",
+  goalSlug: "learn-python",
+  goalTitle: "Learn Python programming",
+  goalCategory: "Programming",
+  goalType: "Skill",
+  topicId: "python-functions",
+  topicTitle: "Python Functions",
+  skillLevel: "beginner",
+};
+
+const pythonSyntaxInput: GenerateLessonRequest = {
+  topicId: "python-syntax-data-types",
+  topicTitle: "Python Syntax and Basic Data Types",
+  learningObjectives: ["Declare variables", "Use int, float, bool, and str", "Call print()"],
+};
+
+const sqlInput: GenerateLessonRequest = {
+  ...baseInput,
+  goalId: "master-sql",
+  goalSlug: "master-sql",
+  goalTitle: "Master SQL for data analysis",
+  goalCategory: "Data",
+  goalType: "Skill",
+  topicId: "sql-joins",
+  topicTitle: "SQL JOINs",
+  skillLevel: "intermediate",
+  learningObjectives: ["Write INNER and LEFT JOINs", "Explain join cardinality"],
+};
+
+const gitInput: GenerateLessonRequest = {
+  ...baseInput,
+  goalId: "learn-git",
+  goalSlug: "learn-git",
+  goalTitle: "Learn Git version control",
+  goalCategory: "DevOps",
+  goalType: "Skill",
+  topicId: "git-branching",
+  topicTitle: "Git Branching",
+  skillLevel: "beginner",
+};
+
+const promptEngineeringInput: GenerateLessonRequest = {
+  ...baseInput,
+  goalId: "learn-prompt-engineering",
+  goalSlug: "learn-prompt-engineering",
+  goalTitle: "Learn Prompt Engineering",
+  goalCategory: "AI / Machine Learning",
+  goalType: "Skill",
+  topicId: "prompt-structure",
+  topicTitle: "Prompt Structure",
+  skillLevel: "intermediate",
+};
+
+function fallbackContext(overrides: Partial<GenerateLessonRequest> = {}) {
+  const input = { ...kubernetesInput, ...overrides };
 
   return {
-    title,
-    estimatedMinutes: 45,
-    learningObjectives: [`Understand ${title}`],
-    sections: [
-      {
-        heading: "Core concepts",
-        content: "Focused lesson content for the requested topic with practical framing.",
-        practicalExample: "Apply the concept in a realistic scenario tied to the learner goal.",
-        commonMistakes: ["Studying without connecting concepts to practice"],
-        summary: ["Review the core idea before moving to the next task"],
-        knowledgeCheck: [
-          knowledgeCheck(`Which statement best describes a core idea in ${title}?`, "core-concept-a"),
-          knowledgeCheck(`Which example applies ${title} correctly?`, "core-concept-b"),
-          knowledgeCheck(`Which mistake should you avoid in ${title}?`, "core-concept-c"),
-        ],
-      },
-      {
-        heading: "Applied practice",
-        content: "Second section content continues the lesson with applied learning.",
-        practicalExample: "Walk through one scenario and identify the key decisions.",
-        commonMistakes: ["Memorizing without understanding"],
-        summary: ["Connect this topic to your next roadmap milestone"],
-        knowledgeCheck: [
-          knowledgeCheck(`Which applied scenario fits ${title}?`, "applied-concept-a"),
-          knowledgeCheck(`Which decision validates understanding of ${title}?`, "applied-concept-b"),
-        ],
-      },
-    ],
+    goalId: input.goalId,
+    goalSlug: input.goalSlug,
+    goalTitle: input.goalTitle,
+    goalCategory: input.goalCategory,
+    topicId: input.topicId,
+    topicTitle: input.topicTitle,
+    skillLevel: input.skillLevel,
+    learningObjectives: input.learningObjectives,
+    durationMinutes: input.durationMinutes,
   };
 }
 
 describe("deterministic lesson fallbacks", () => {
-  it("AWS fallback uses existing seed lesson content", () => {
-    const lesson = resolveDeterministicLesson({
-      goalId: "aws-saa-c03",
-      topicId: "vpc-networking",
-      topicTitle: "VPC Networking",
-    });
+  it("AWS fallback uses mentor structure with seed teaching content", () => {
+    const lesson = resolveDeterministicLesson(
+      fallbackContext({
+        goalId: "aws-saa-c03",
+        goalSlug: "aws-saa-c03",
+        topicId: "vpc-networking",
+        topicTitle: "VPC Networking",
+      }),
+    );
 
     expect(lesson.title).toContain("VPC");
-    expect(JSON.stringify(lesson).toLowerCase()).toContain("aws");
+    expect(lesson.sections.map((section) => section.heading)).toEqual([...mentorSectionHeadings()]);
+    expect(lesson.sections[2].content.toLowerCase()).toContain("subnet");
+    expect(lesson.sections[3].handsOnPractice?.exercise).toBeTruthy();
+    expect(containsGenericLessonPhrases(JSON.stringify(lesson))).toBe(false);
   });
 
-  it("Azure fallback never includes AWS lesson content", () => {
-    const lesson = resolveDeterministicLesson({
-      goalId: "azure-fundamentals",
-      topicId: "core-azure-services",
-      topicTitle: "Core Azure Services",
-    });
+  it("Azure fallback uses mentor structure without AWS seed leakage", () => {
+    const lesson = resolveDeterministicLesson(
+      fallbackContext({
+        goalId: "azure-fundamentals",
+        goalSlug: "azure-fundamentals",
+        goalTitle: "Azure Fundamentals AZ-900",
+        goalCategory: "Cloud",
+        topicId: "core-azure-services",
+        topicTitle: "Core Azure Services",
+        skillLevel: "beginner",
+      }),
+    );
 
     expect(JSON.stringify(lesson).toLowerCase()).not.toContain("aws global infrastructure");
     expect(JSON.stringify(lesson).toLowerCase()).not.toContain("ec2");
     expect(lesson.title).toContain("Core Azure Services");
+    expect(lesson.sections[0].heading).toBe("Lesson Overview");
+    expect(lesson.sections[0].content).toContain("Core Azure Services");
+    expect(containsGenericLessonPhrases(JSON.stringify(lesson))).toBe(false);
   });
 
-  it("custom Kubernetes goal produces a generic topic lesson", () => {
-    const lesson = createDeterministicLessonForLearner({
-      goalId: "learn-kubernetes",
-      topicId: "kubernetes-networking",
-      topicTitle: "Kubernetes Networking",
-    }).lesson;
+  it("Kubernetes fallback teaches the topic without hardcoded platform snippets", () => {
+    const lesson = createDeterministicLessonForLearner(
+      fallbackContext({
+        goalId: "learn-kubernetes",
+        goalSlug: "learn-kubernetes",
+        topicId: "kubernetes-networking",
+        topicTitle: "Kubernetes Networking",
+        learningObjectives: ["Explain Pod networking", "Configure Services"],
+      }),
+    ).lesson;
 
     expect(lesson.title).toContain("Kubernetes Networking");
-    expect(JSON.stringify(lesson).toLowerCase()).not.toContain("amazon web services");
+    expect(lesson.sections[0].heading).toBe("Lesson Overview");
+    expect(lesson.sections[0].content).toContain("Kubernetes Networking");
+    expect(containsGenericLessonPhrases(JSON.stringify(lesson))).toBe(false);
+    expect(containsLessonMetaLanguage(JSON.stringify(lesson))).toBe(false);
+  });
+
+  it("Python fallback teaches the topic without meta instructional language", () => {
+    const lesson = createDeterministicLessonForLearner(
+      fallbackContext({
+        ...pythonSyntaxInput,
+        learningObjectives: pythonSyntaxInput.learningObjectives,
+      }),
+    ).lesson;
+
+    const body = JSON.stringify(lesson);
+    expect(lesson.sections[0].content).toContain("Python Syntax and Basic Data Types");
+    expect(body).toContain("Declare variables");
+    expect(body).not.toMatch(/today you will work through/i);
+    expect(body).not.toMatch(/your roadmap/i);
+    expect(body).not.toMatch(/session focus/i);
+    expect(containsLessonMetaLanguage(body)).toBe(false);
+  });
+
+  it("SQL fallback uses objectives as technical focus", () => {
+    const lesson = createDeterministicLessonForLearner(fallbackContext(sqlInput)).lesson;
+
+    const body = JSON.stringify(lesson);
+    expect(body).toContain("INNER and LEFT JOINs");
+    expect(body).toContain("join cardinality");
+    expect(containsLessonMetaLanguage(body)).toBe(false);
+  });
+
+  it.each([
+    ["Git", gitInput],
+    ["Prompt Engineering", promptEngineeringInput],
+  ])("%s fallback produces eight mentor sections with hands-on practice", (_label, input) => {
+    const lesson = createDeterministicLessonForLearner(fallbackContext(input)).lesson;
+
+    expect(lesson.sections).toHaveLength(8);
+    expect(lesson.sections[3].heading).toBe("Hands-on Practice");
+    expect(lesson.sections[3].handsOnPractice?.expectedOutcome).toBeTruthy();
+    expect(lesson.sections[0].heading).toBe("Lesson Overview");
+    expect(lesson.sections[0].content).toContain(input.topicTitle);
+    expect(containsGenericLessonPhrases(JSON.stringify(lesson))).toBe(false);
   });
 });
 
@@ -159,7 +251,7 @@ describe("generateLessonForLearner service", () => {
   it("returns AI lesson for AWS goal", async () => {
     process.env.GEMINI_API_KEY = "test-key";
     mockGeminiGenerateContent.mockResolvedValue({
-      text: JSON.stringify(validLesson("AWS VPC Networking Essentials")),
+      text: JSON.stringify(buildMentorLessonFixture("AWS VPC Networking Essentials", { cloud: "aws" })),
     });
 
     const result = await generateLessonForLearner(baseInput);
@@ -171,7 +263,7 @@ describe("generateLessonForLearner service", () => {
   it("returns AI lesson for Azure goal", async () => {
     process.env.GEMINI_API_KEY = "test-key";
     mockGeminiGenerateContent.mockResolvedValue({
-      text: JSON.stringify(validLesson("Azure Cloud Concepts Overview")),
+      text: JSON.stringify(buildMentorLessonFixture("Azure Cloud Concepts Overview", { cloud: "azure" })),
     });
 
     const result = await generateLessonForLearner(azureInput);
@@ -188,6 +280,7 @@ describe("generateLessonForLearner service", () => {
 
     expect(result.source).toBe("deterministic");
     expect(result.fallbackReason).toBe("invalid-json");
+    expect(containsGenericLessonPhrases(JSON.stringify(result.lesson))).toBe(false);
   });
 
   it("falls back when API key is missing", async () => {
@@ -197,15 +290,48 @@ describe("generateLessonForLearner service", () => {
 
     expect(result.source).toBe("deterministic");
     expect(JSON.stringify(result.lesson).toLowerCase()).not.toContain("aws global infrastructure");
+    expect(containsGenericLessonPhrases(JSON.stringify(result.lesson))).toBe(false);
   });
 
   it("rejects Azure AI output containing AWS-specific content", async () => {
     process.env.GEMINI_API_KEY = "test-key";
     mockGeminiGenerateContent.mockResolvedValue({
-      text: JSON.stringify(validLesson("Amazon EC2 Compute Essentials")),
+      text: JSON.stringify(buildMentorLessonFixture("Amazon EC2 Compute Essentials", { cloud: "aws" })),
     });
 
     const result = await generateLessonForLearner(azureInput);
+
+    expect(result.source).toBe("deterministic");
+    expect(result.fallbackReason).toBe("structure-validation");
+  });
+
+  it("rejects AI output with generic placeholder phrasing", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const genericLesson = buildMentorLessonFixture("VPC Lesson", { cloud: "aws" });
+    genericLesson.sections[0].practicalExample =
+      "Imagine you are explaining VPCs to a teammate who needs a concise overview.";
+
+    mockGeminiGenerateContent.mockResolvedValue({
+      text: JSON.stringify(genericLesson),
+    });
+
+    const result = await generateLessonForLearner(baseInput);
+
+    expect(result.source).toBe("deterministic");
+    expect(result.fallbackReason).toBe("structure-validation");
+  });
+
+  it("rejects AI output with instructional meta language", async () => {
+    process.env.GEMINI_API_KEY = "test-key";
+    const metaLesson = buildMentorLessonFixture("VPC Lesson", { cloud: "aws" });
+    metaLesson.sections[0].content =
+      "Today you will work through VPC networking as part of your learning goal. Session focus: explain key ideas from your roadmap.";
+
+    mockGeminiGenerateContent.mockResolvedValue({
+      text: JSON.stringify(metaLesson),
+    });
+
+    const result = await generateLessonForLearner(baseInput);
 
     expect(result.source).toBe("deterministic");
     expect(result.fallbackReason).toBe("structure-validation");
@@ -214,7 +340,7 @@ describe("generateLessonForLearner service", () => {
 
 describe("lesson schema validation", () => {
   it("accepts valid lesson structure", () => {
-    const parsed = aiLessonResponseSchema.safeParse(validLesson("Valid Lesson"));
+    const parsed = aiLessonResponseSchema.safeParse(buildMentorLessonFixture("Valid Lesson"));
     expect(parsed.success).toBe(true);
   });
 
@@ -227,6 +353,30 @@ describe("lesson schema validation", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("rejects lessons with fewer than three common mistakes", () => {
+    const lesson = buildMentorLessonFixture("Too Few Mistakes");
+    lesson.sections[0].commonMistakes = ["Only one mistake listed here"];
+
+    const parsed = aiLessonResponseSchema.safeParse(lesson);
+    expect(parsed.success).toBe(false);
+  });
+
+  it("detects generic placeholder phrasing", () => {
+    expect(containsGenericLessonPhrases("Imagine you are explaining VPCs")).toBe(true);
+    expect(containsGenericLessonPhrases("Create subnets with route tables")).toBe(false);
+  });
+
+  it("validates topic-specific AI structure", () => {
+    const error = validateAiLessonStructure(buildMentorLessonFixture("VPC Lesson", { cloud: "aws" }), {
+      goalSlug: "aws-saa-c03",
+      goalCategory: "Cloud",
+      topicId: "vpc-networking",
+      topicTitle: "VPC Lesson",
+    });
+
+    expect(error).toBeNull();
   });
 
   it("detects AWS-specific text for Azure guardrails", () => {
@@ -242,7 +392,7 @@ describe("lesson session cache", () => {
 
   it("reuses cached lesson in the same session", () => {
     const lesson = {
-      ...validLesson("Cached Azure Lesson"),
+      ...buildMentorLessonFixture("Cached Azure Lesson", { cloud: "azure" }),
       topicId: "cloud-concepts",
       source: "ai" as const,
     };
@@ -275,5 +425,7 @@ describe("POST /api/learn/generate-lesson", () => {
     const body = await response.json();
     expect(body.source).toBe("deterministic");
     expect(body.lesson.topicId).toBe("cloud-concepts");
+    expect(body.lesson.sections[0].commonMistakes.length).toBeGreaterThanOrEqual(3);
+    expect(containsGenericLessonPhrases(JSON.stringify(body.lesson))).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
-import type { GeneratedLessonPayload } from "@/lib/learn/lesson-response-schema";
+﻿import type { GeneratedLessonPayload } from "@/lib/learn/lesson-response-schema";
 
-const CACHE_PREFIX = "mentormind-lesson-cache:";
+const CACHE_PREFIX = "mentormind-lesson-cache:v2:";
 
 function buildCacheKey(goalId: string, topicId: string): string {
   return `${CACHE_PREFIX}${goalId}:${topicId}`;

@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BookOpen, CheckCircle2, Lightbulb, Target } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Lightbulb, Target, Wrench } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { LessonPracticalBlock } from "@/components/tutor/lesson-practical-block";
 import { TutorFlowStepper } from "@/components/tutor/tutor-flow-stepper";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,7 +81,7 @@ export function LessonView({ topicId }: { topicId: string }) {
             Preparing your lesson
           </div>
           <p className="mt-4 text-lg font-medium">
-            MentorMind is preparing your personalized lesson…
+            MentorMind is preparing your personalized lesson?
           </p>
           <p className="mt-2 text-sm text-muted">
             This usually takes a few seconds. Your lesson will appear here automatically.
@@ -144,11 +145,63 @@ export function LessonView({ topicId }: { topicId: string }) {
         </ul>
       </GlassCard>
 
+      {lesson.practicalArtifact && lesson.handsOnExercise ? (
+        <GlassCard>
+          <LessonPracticalBlock
+            practicalArtifact={lesson.practicalArtifact}
+            handsOnExercise={lesson.handsOnExercise}
+          />
+        </GlassCard>
+      ) : null}
+
       <div className="space-y-4">
         {lesson.sections.map((section) => (
           <GlassCard key={section.heading}>
             <h3 className="text-lg font-semibold">{section.heading}</h3>
             <p className="mt-3 text-sm leading-8 text-muted">{section.content}</p>
+
+            {section.handsOnPractice ? (
+              <div className="mt-6 rounded-xl border border-violet-400/20 bg-violet-400/5 p-4 space-y-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-violet-200">
+                  <Wrench className="h-4 w-4" />
+                  Hands-on practice
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Your exercise</p>
+                  <p className="mt-1 text-sm leading-7 text-muted">{section.handsOnPractice.exercise}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Instructions</p>
+                  <p className="mt-1 text-sm leading-7 text-muted whitespace-pre-line">
+                    {section.handsOnPractice.instructions}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Think about first</p>
+                  <p className="mt-1 text-sm leading-7 text-muted">{section.handsOnPractice.thinkAbout}</p>
+                </div>
+                {section.handsOnPractice.hints?.length ? (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Hints</p>
+                    <ul className="mt-1 space-y-1">
+                      {section.handsOnPractice.hints.map((hint) => (
+                        <li key={hint} className="text-sm leading-7 text-muted">
+                          ? {hint}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Expected outcome</p>
+                  <p className="mt-1 text-sm leading-7 text-muted">{section.handsOnPractice.expectedOutcome}</p>
+                </div>
+                <div className="rounded-lg border border-violet-400/10 bg-violet-400/5 p-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-violet-200">Why this works</p>
+                  <p className="mt-1 text-sm leading-7 text-muted">{section.handsOnPractice.solutionExplanation}</p>
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-6 rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Practical example</p>
@@ -160,7 +213,7 @@ export function LessonView({ topicId }: { topicId: string }) {
               <ul className="mt-2 space-y-2">
                 {section.commonMistakes.map((mistake) => (
                   <li key={mistake} className="text-sm leading-7 text-muted">
-                    • {mistake}
+                    ? {mistake}
                   </li>
                 ))}
               </ul>

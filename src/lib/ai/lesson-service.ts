@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { logGeminiLessonGenerated } from "@/lib/dev/architecture-log";
 import { generateLessonWithGemini, getLessonGeminiModel, type GenerateLessonInput } from "@/lib/ai/generate-lesson";
@@ -47,8 +47,13 @@ export async function generateLessonForLearner(
   const startedAt = Date.now();
   const fallbackContext: LessonFallbackContext = {
     goalId: input.goalId,
+    goalSlug: input.goalSlug,
+    goalTitle: input.goalTitle,
+    goalCategory: input.goalCategory,
     topicId: input.topicId,
     topicTitle: input.topicTitle,
+    skillLevel: input.skillLevel,
+    learningObjectives: input.learningObjectives,
     durationMinutes: input.durationMinutes,
   };
 

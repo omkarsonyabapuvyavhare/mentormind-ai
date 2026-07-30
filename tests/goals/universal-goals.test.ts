@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
 import { buildAssessmentFromLesson } from "@/lib/assessment/build-lesson-assessment";
 import { createDeterministicRoadmapFromOnboarding } from "@/lib/ai/roadmap-deterministic";
@@ -24,6 +24,7 @@ import { parseGoalIntentDeterministic } from "@/lib/onboarding/parse-intent-dete
 import { onboardingInputSchema } from "@/lib/onboarding/schema";
 import type { GeneratedLessonPayload } from "@/lib/learn/lesson-response-schema";
 import type { OnboardingInput } from "@/lib/onboarding/schema";
+import { buildMentorLessonFixture } from "../helpers/mentor-lesson-fixture";
 
 const START = "2026-07-17T00:00:00.000Z";
 const TWIN_ID = "learner-20260717000000";
@@ -169,8 +170,8 @@ describe("cross-domain validation", () => {
 
   it("rejects Azure content in React lessons", () => {
     const error = validateAiLessonStructure(
-      buildLesson({ title: "React Components" }),
-      { goalSlug: "learn-react", goalCategory: "Web Development" },
+      buildMentorLessonFixture("React Components", { domainHint: "React components and props" }),
+      { goalSlug: "learn-react", goalCategory: "Web Development", topicId: "react-components", topicTitle: "React Components" },
     );
 
     expect(error).toBeNull();

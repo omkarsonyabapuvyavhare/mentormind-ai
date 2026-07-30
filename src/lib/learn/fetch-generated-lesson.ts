@@ -1,5 +1,6 @@
-import { createDeterministicLessonForLearner } from "@/lib/ai/lesson-fallback";
+﻿import { createDeterministicLessonForLearner, type LessonFallbackContext } from "@/lib/ai/lesson-fallback";
 import { logApiFallbackTransparency } from "@/lib/dev/architecture-log";
+import { enrichLessonWithPracticalBlocks, lessonHasPracticalBlocks } from "@/lib/learn/enrich-lesson-practical";
 import { recordLessonFetchTiming } from "@/lib/learn/lesson-fetch-timing";
 import {
   generateLessonResponseSchema,
@@ -22,6 +23,37 @@ function cacheAndReturn(
   return payload;
 }
 
+function toFallbackContext(request: GenerateLessonRequest): LessonFallbackContext {
+  return {
+    goalId: request.goalId,
+    goalSlug: request.goalSlug,
+    goalTitle: request.goalTitle,
+    goalCategory: request.goalCategory,
+    topicId: request.topicId,
+    topicTitle: request.topicTitle,
+    skillLevel: request.skillLevel,
+    learningObjectives: request.learningObjectives,
+    durationMinutes: request.durationMinutes,
+  };
+}
+
+function normalizeLessonPayload(
+  request: GenerateLessonRequest,
+  payload: GeneratedLessonPayload,
+): GeneratedLessonPayload {
+  if (lessonHasPracticalBlocks(payload)) {
+    return payload;
+  }
+
+  const enriched = enrichLessonWithPracticalBlocks(payload, toFallbackContext(request));
+
+  return {
+    ...enriched,
+    topicId: request.topicId,
+    source: payload.source,
+  };
+}
+
 function buildFallbackPayload(
   request: GenerateLessonRequest,
   reason: string,
@@ -29,8 +61,13 @@ function buildFallbackPayload(
   const fallback = createDeterministicLessonForLearner(
     {
       goalId: request.goalId,
+      goalSlug: request.goalSlug,
+      goalTitle: request.goalTitle,
+      goalCategory: request.goalCategory,
       topicId: request.topicId,
       topicTitle: request.topicTitle,
+      skillLevel: request.skillLevel,
+      learningObjectives: request.learningObjectives,
       durationMinutes: request.durationMinutes,
     },
     reason,
@@ -49,7 +86,7 @@ function buildFallbackPayload(
     topicId: request.topicId,
   });
 
-  return cacheAndReturn(request.goalId, payload);
+  return cacheAndReturn(request.goalId, normalizeLessonPayload(request, payload));
 }
 
 async function fetchGeneratedLessonInternal(
@@ -67,7 +104,7 @@ async function fetchGeneratedLessonInternal(
       topicId: request.topicId,
       goalId: request.goalId,
     });
-    return cached;
+    return normalizeLessonPayload(request, cached);
   }
 
   try {
@@ -118,7 +155,7 @@ async function fetchGeneratedLessonInternal(
       source: validated.data.source,
     };
 
-    return cacheAndReturn(request.goalId, payload);
+    return cacheAndReturn(request.goalId, normalizeLessonPayload(request, payload));
   } catch {
     return buildFallbackPayload(request, "network");
   }
@@ -135,7 +172,7 @@ export async function fetchGeneratedLesson(
       goalId: request.goalId,
       detail: "in-flight bypass",
     });
-    return cached;
+    return normalizeLessonPayload(request, cached);
   }
 
   const key = lessonRequestKey(request.goalId, request.topicId);
@@ -153,7 +190,7 @@ export async function fetchGeneratedLesson(
   return promise;
 }
 
-/** Test helper — clears in-flight deduplication state. */
+/** Test helper ΓÇö clears in-flight deduplication state. */
 export function resetLessonFetchDedupForTests(): void {
   inFlightLessons.clear();
 }

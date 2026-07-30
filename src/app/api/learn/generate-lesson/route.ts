@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 import { createDeterministicLessonForLearner } from "@/lib/ai/lesson-fallback";
 import { generateLessonForLearner } from "@/lib/ai/lesson-service";
@@ -33,8 +33,13 @@ export async function POST(request: Request) {
     const fallback = createDeterministicLessonForLearner(
       {
         goalId: input.goalId,
+        goalSlug: input.goalSlug,
+        goalTitle: input.goalTitle,
+        goalCategory: input.goalCategory,
         topicId: input.topicId,
         topicTitle: input.topicTitle,
+        skillLevel: input.skillLevel,
+        learningObjectives: input.learningObjectives,
         durationMinutes: input.durationMinutes,
       },
       "request-error",
