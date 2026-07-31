@@ -3,11 +3,14 @@ import {
   type TopicAssessment,
 } from "@/lib/assessment/assessment-schema";
 
-const CACHE_PREFIX = "mentormind-assessment-cache:v3:";
-const LEGACY_CACHE_PREFIXES = [
+export const ASSESSMENT_CACHE_VERSION = "v4";
+const CACHE_PREFIX = `mentormind-assessment-cache:${ASSESSMENT_CACHE_VERSION}:`;
+/** Versioned prefixes only — bare stem matches current v4 keys. */
+const LEGACY_VERSIONED_PREFIXES = [
+  "mentormind-assessment-cache:v3:",
   "mentormind-assessment-cache:v2:",
-  "mentormind-assessment-cache:",
 ] as const;
+const UNVERSIONED_ASSESSMENT_PREFIX = "mentormind-assessment-cache:";
 
 const GENERIC_TOPIC_IDS = new Set([
   "foundations",
@@ -25,14 +28,65 @@ function buildCacheKey(goalId: string, topicId: string): string {
   return `${CACHE_PREFIX}${goalId}:${topicId}`;
 }
 
+function clearSessionStorageByPrefix(prefix: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < window.sessionStorage.length; index += 1) {
+    const key = window.sessionStorage.key(index);
+    if (key?.startsWith(prefix)) {
+      keysToRemove.push(key);
+    }
+  }
+
+  for (const key of keysToRemove) {
+    window.sessionStorage.removeItem(key);
+  }
+}
+
+function isUnversionedAssessmentCacheKey(key: string): boolean {
+  if (!key.startsWith(UNVERSIONED_ASSESSMENT_PREFIX)) {
+    return false;
+  }
+
+  const rest = key.slice(UNVERSIONED_ASSESSMENT_PREFIX.length);
+  return !/^v\d+:/.test(rest);
+}
+
+/** Drop pre-v4 assessment cache entries (all goals/topics). */
+export function clearLegacyAssessmentCaches(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  for (const prefix of LEGACY_VERSIONED_PREFIXES) {
+    clearSessionStorageByPrefix(prefix);
+  }
+
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < window.sessionStorage.length; index += 1) {
+    const key = window.sessionStorage.key(index);
+    if (key && isUnversionedAssessmentCacheKey(key)) {
+      keysToRemove.push(key);
+    }
+  }
+
+  for (const key of keysToRemove) {
+    window.sessionStorage.removeItem(key);
+  }
+}
+
 function clearIncompatibleCacheEntries(goalId: string, topicId: string): void {
   if (typeof window === "undefined") {
     return;
   }
 
-  for (const prefix of LEGACY_CACHE_PREFIXES) {
+  for (const prefix of LEGACY_VERSIONED_PREFIXES) {
     window.sessionStorage.removeItem(`${prefix}${goalId}:${topicId}`);
   }
+  window.sessionStorage.removeItem(`${UNVERSIONED_ASSESSMENT_PREFIX}${goalId}:${topicId}`);
 }
 
 function isIncompatibleCachedAssessment(assessment: TopicAssessment, topicId: string): boolean {
@@ -52,7 +106,8 @@ export function readCachedAssessment(
     return null;
   }
 
-  // Drop pre-v3 / generic quiz entries so stale Foundations quizzes are never reused.
+  // Drop pre-v4 / generic quiz entries so stale Foundations quizzes are never reused.
+  clearLegacyAssessmentCaches();
   clearIncompatibleCacheEntries(goalId, topicId);
 
   const cacheKey = buildCacheKey(goalId, topicId);

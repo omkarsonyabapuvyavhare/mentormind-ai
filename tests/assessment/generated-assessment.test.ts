@@ -514,7 +514,7 @@ describe("assessment routing and cache", () => {
   it("rejects stale 3-question session cache and clears storage", () => {
     const legacyKey = "mentormind-assessment-cache:learn-python:python-basics";
     const previousKey = "mentormind-assessment-cache:v2:learn-python:python-basics";
-    const currentKey = "mentormind-assessment-cache:v3:learn-python:python-basics";
+    const currentKey = "mentormind-assessment-cache:v4:learn-python:python-basics";
     const stalePayload = JSON.stringify({
       topicId: "python-basics",
       passingScore: 70,
