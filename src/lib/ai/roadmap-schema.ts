@@ -47,6 +47,13 @@ export interface RoadmapValidationContext {
   goalCategory: GoalCategory;
 }
 
+const GENERIC_TOPIC_TITLE_PATTERN =
+  /^(foundations|core concepts?|applied practice(?:\s+\d+)?|review|introduction|basics|practice|fundamentals|overview)$/i;
+
+function isGenericRoadmapTopicTitle(title: string): boolean {
+  return GENERIC_TOPIC_TITLE_PATTERN.test(title.trim());
+}
+
 export function validateAiRoadmapStructure(
   parsed: AiRoadmapResponse,
   durationWeeks: number,
@@ -69,10 +76,22 @@ export function validateAiRoadmapStructure(
     return "Milestone week values must fall within the requested duration.";
   }
 
+  const genericTopicCount = parsed.milestones.filter((milestone) =>
+    isGenericRoadmapTopicTitle(milestone.topicTitle),
+  ).length;
+
+  if (genericTopicCount >= Math.ceil(parsed.milestones.length * 0.5)) {
+    return "Roadmap topics must be domain-specific technical concepts, not generic labels like Foundations or Core Concepts.";
+  }
+
   let totalTasks = 0;
 
   for (const milestone of parsed.milestones) {
     totalTasks += milestone.tasks.length;
+
+    if (isGenericRoadmapTopicTitle(milestone.topicTitle)) {
+      return `Milestone topic "${milestone.topicTitle}" is too generic; use a concrete technical topic.`;
+    }
 
     const milestoneError = validateContentForGoalCategory(
       `${milestone.title} ${milestone.topicTitle} ${milestone.description}`,
@@ -85,6 +104,10 @@ export function validateAiRoadmapStructure(
     }
 
     for (const task of milestone.tasks) {
+      if (/explain key ideas in/i.test(task.learningObjectives.join(" "))) {
+        return "Learning objectives must be technical and specific, not generic study meta-language.";
+      }
+
       const taskError = validateContentForGoalCategory(
         `${task.title} ${task.description}`,
         context.goalCategory,

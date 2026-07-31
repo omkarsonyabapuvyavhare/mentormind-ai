@@ -326,6 +326,106 @@ export function containsLessonMetaLanguage(text: string): boolean {
   return LESSON_META_LANGUAGE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+const OBJECTIVE_ECHO_PATTERNS: RegExp[] = [
+  /\bapply\b.+\bin a concrete worked example\b/i,
+  /\bexplain (?:key ideas|core mechanics)\b.+/i,
+  /\bfoundations workflow\b/i,
+  /\bexplain key ideas in\b/i,
+];
+
+function significantObjectivePhrases(objectives: string[]): string[] {
+  return [...new Set(objectives.map((objective) => objective.trim().toLowerCase()).filter((phrase) => phrase.length >= 16))];
+}
+
+function splitLessonParagraphs(lesson: AiLessonResponse): string[] {
+  const chunks: string[] = [];
+
+  for (const section of lesson.sections) {
+    chunks.push(
+      ...section.content
+        .split(/\n{2,}|(?<=[.!?])\s+(?=[A-Z])/)
+        .map((part) => part.trim())
+        .filter((part) => part.length >= 40),
+    );
+
+    if (section.practicalExample.trim().length >= 40) {
+      chunks.push(section.practicalExample.trim());
+    }
+
+    for (const item of [...section.summary, ...section.commonMistakes]) {
+      if (item.trim().length >= 24) {
+        chunks.push(item.trim());
+      }
+    }
+  }
+
+  return chunks;
+}
+
+function paragraphEchoesObjective(paragraph: string, phrases: string[]): boolean {
+  const lower = paragraph.toLowerCase();
+
+  if (OBJECTIVE_ECHO_PATTERNS.some((pattern) => pattern.test(paragraph))) {
+    return true;
+  }
+
+  return phrases.some((phrase) => lower.includes(phrase));
+}
+
+/**
+ * Reject lessons that treat learning objectives as the lesson body.
+ * Objectives may exist as metadata; they must not dominate prose or headings.
+ */
+export function findObjectiveEchoViolation(
+  lesson: AiLessonResponse,
+  objectives: string[] | undefined,
+): string | null {
+  const phrases = significantObjectivePhrases(objectives ?? []);
+
+  for (const section of lesson.sections) {
+    const heading = section.heading.trim().toLowerCase();
+    for (const phrase of phrases) {
+      if (heading === phrase || (phrase.length >= 24 && heading.includes(phrase))) {
+        return "Learning objective text must not be copied into section headings; teach topic concepts instead.";
+      }
+    }
+    if (OBJECTIVE_ECHO_PATTERNS.some((pattern) => pattern.test(section.heading))) {
+      return "Learning objective text must not be copied into section headings; teach topic concepts instead.";
+    }
+  }
+
+  const paragraphs = splitLessonParagraphs(lesson);
+  if (paragraphs.length === 0) {
+    return null;
+  }
+
+  const echoCount = paragraphs.filter((paragraph) => paragraphEchoesObjective(paragraph, phrases)).length;
+  const echoRatio = echoCount / paragraphs.length;
+
+  if (echoRatio > 0.25) {
+    return "More than 25% of paragraphs repeat learning-objective wording; teach the topic itself instead of echoing objectives.";
+  }
+
+  const body = lesson.sections
+    .map((section) => [section.content, section.practicalExample, ...section.summary, ...section.commonMistakes].join(" "))
+    .join("\n");
+
+  const patternHits = OBJECTIVE_ECHO_PATTERNS.reduce(
+    (total, pattern) => total + (body.match(new RegExp(pattern.source, "gi"))?.length ?? 0),
+    0,
+  );
+  const phraseHits = phrases.reduce(
+    (total, phrase) => total + (body.toLowerCase().split(phrase).length - 1),
+    0,
+  );
+
+  if (patternHits + phraseHits >= 4) {
+    return "Learning-objective phrases dominate the lesson body; expand the topic title into technical concepts instead.";
+  }
+
+  return null;
+}
+
 export function validateAiLessonStructure(
   parsed: AiLessonResponse,
   context: LessonValidationContext,
@@ -353,6 +453,15 @@ export function validateAiLessonStructure(
 
   if (structureError) {
     return structureError;
+  }
+
+  const objectiveEchoError = findObjectiveEchoViolation(
+    parsed,
+    context.learningObjectives ?? parsed.learningObjectives,
+  );
+
+  if (objectiveEchoError) {
+    return objectiveEchoError;
   }
 
   const practicalError = validateLessonPracticalBlocks(parsed, {

@@ -2,6 +2,10 @@
 
 import { createDeterministicLessonForLearner } from "@/lib/ai/lesson-fallback";
 import { generateLessonForLearner } from "@/lib/ai/lesson-service";
+import {
+  getServerLessonFallbackPath,
+  resetServerLessonFallbackPath,
+} from "@/lib/dev/lesson-source-observability";
 import { generateLessonRequestSchema } from "@/lib/learn/generate-lesson-request-schema";
 
 export async function POST(request: Request) {
@@ -28,8 +32,10 @@ export async function POST(request: Request) {
       source: result.source,
       lesson: result.lesson,
       fallbackReason: result.fallbackReason,
+      generationPath: result.generationPath,
     });
   } catch {
+    resetServerLessonFallbackPath();
     const fallback = createDeterministicLessonForLearner(
       {
         goalId: input.goalId,
@@ -44,11 +50,13 @@ export async function POST(request: Request) {
       },
       "request-error",
     );
+    const generationPath = getServerLessonFallbackPath();
 
     return NextResponse.json({
       source: fallback.source,
       lesson: fallback.lesson,
       fallbackReason: fallback.fallbackReason,
+      generationPath,
     });
   }
 }

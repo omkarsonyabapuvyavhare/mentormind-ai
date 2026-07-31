@@ -167,6 +167,11 @@ export function buildDefaultParsedIntent(): ParsedGoalIntent {
     targetOutcome: "Reach a structured learning outcome for this goal",
     durationWeeks: 8,
     studyHoursPerWeek: 6,
-    recommendedFocusAreas: ["Foundations", "Core Concepts", "Practice", "Review"],
+    recommendedFocusAreas: [
+      "Goal Fundamentals",
+      "Core Techniques",
+      "Practical Workflows",
+      "Applied Project",
+    ],
   });
 }

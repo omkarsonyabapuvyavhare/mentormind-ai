@@ -65,7 +65,7 @@ Optional:
 - `GEMINI_MODEL` (default: `gemini-3-flash-preview`)
 - `AI_INTENT_PARSE_TIMEOUT_MS`
 - `AI_ROADMAP_GENERATE_TIMEOUT_MS`
-- `AI_LESSON_GENERATE_TIMEOUT_MS`
+- `AI_LESSON_GENERATE_TIMEOUT_MS` (default: `60000`; independent of intent timeout)
 - `NEXT_PUBLIC_SITE_URL`
 
 Presenter mode:
@@ -147,7 +147,9 @@ mentormind-ai/
 - Promote from preview or deploy from main branch.
 - Configure environment variables in Vercel project settings:
   - `GEMINI_API_KEY` (required for live AI generation)
+  - `NEXT_PUBLIC_PRESENTER_MODE=true` (required for presenter demo controls in production)
   - Optional overrides from `.env.example` as needed
+- **Important:** `NEXT_PUBLIC_*` values are inlined into the client bundle at **build** time. If you change `NEXT_PUBLIC_PRESENTER_MODE` in Vercel, you must **redeploy / rebuild** — saving the env var alone will not update an existing deployment.
 
 ### Vercel Configuration
 
@@ -158,7 +160,7 @@ mentormind-ai/
 
 - **PowerShell `npm` execution policy error**: use `npm.cmd <command>` instead of `npm <command>`.
 - **Gemini key missing**: app will continue via deterministic fallback content.
-- **Presenter controls not visible**: verify `NEXT_PUBLIC_PRESENTER_MODE=true` and route context.
+- **Presenter controls not visible**: verify `NEXT_PUBLIC_PRESENTER_MODE=true` in Vercel **and redeploy**. Open browser console — logs should show `envPresenterMode: true`. Local `.env.local` does not apply to Vercel.
 - **Port already in use**: run `npm run dev -- --port <port>`.
 - **Optional runtime verification scripts fail on Playwright path**: some scripts currently expect a Cursor-managed Playwright path under `%TEMP%/pw-temp/node_modules/playwright`; this is not required for normal app startup/build/test.
 

@@ -7,6 +7,7 @@ import { ArrowRight, BookOpen, CheckCircle2, Lightbulb, Target, Wrench } from "l
 
 import { AppShell } from "@/components/layout/app-shell";
 import { LessonPracticalBlock } from "@/components/tutor/lesson-practical-block";
+import { LessonSourceDevBadge } from "@/components/tutor/lesson-source-dev-badge";
 import { TutorFlowStepper } from "@/components/tutor/tutor-flow-stepper";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +107,12 @@ export function LessonView({ topicId }: { topicId: string }) {
   return (
     <AppShell title="Learning" subtitle="Study the concepts, then check your understanding.">
       <TutorFlowStepper current="learn" className="mb-2" />
+
+      <LessonSourceDevBadge
+        goalId={goalId}
+        topicId={topicId}
+        lessonSource={lesson.source}
+      />
 
       {sessionTimer.label ? (
         <GlassCard className="border-white/10 bg-white/5 py-3">

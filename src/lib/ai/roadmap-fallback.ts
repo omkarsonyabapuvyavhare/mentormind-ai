@@ -1,7 +1,12 @@
 import { addWeeks, parseISO } from "date-fns";
 
 import { generateInitialRoadmap } from "@/lib/roadmap/generate-initial";
-import { isAwsCertificationGoal } from "@/lib/goals/goal-identity";
+import {
+  areGenericFocusAreas,
+  inferFocusAreas,
+  isAwsCertificationGoal,
+  isGenericFocusArea,
+} from "@/lib/goals/goal-identity";
 import type { OnboardingInput } from "@/lib/onboarding/schema";
 import type { Roadmap, TaskType } from "@/types/roadmap";
 
@@ -203,41 +208,76 @@ export function buildAzureFallbackMilestones(durationWeeks: number): AiRoadmapMi
   return fallbackSeedToAiMilestones(seeds, cappedDuration);
 }
 
+function buildTechnicalObjectives(area: string): [string, string] {
+  return [
+    `Apply ${area} in a concrete worked example`,
+    `Identify and correct common mistakes when using ${area}`,
+  ];
+}
+
+function resolveDomainFocusAreas(
+  input: OnboardingInput,
+  context: RoadmapGenerationContext | undefined,
+): string[] {
+  const candidates = context?.recommendedFocusAreas?.filter((area) => area.trim().length > 0) ?? [];
+
+  if (!areGenericFocusAreas(candidates)) {
+    return candidates;
+  }
+
+  const inferred = inferFocusAreas(context?.goal ?? input.goalTitle, input.goalCategory);
+  if (!areGenericFocusAreas(inferred)) {
+    return inferred;
+  }
+
+  return inferFocusAreas(input.goalTitle, input.goalCategory);
+}
+
 export function buildCustomFallbackMilestones(
   focusAreas: string[],
   durationWeeks: number,
 ): AiRoadmapMilestone[] {
   const cappedDuration = Math.min(Math.max(durationWeeks, 4), 8);
   const minMilestones = Math.min(cappedDuration, 4);
-  const areas = focusAreas.length > 0 ? [...focusAreas] : ["Foundations"];
+  const concreteAreas = focusAreas.filter((area) => !isGenericFocusArea(area));
+  const areas =
+    concreteAreas.length > 0
+      ? [...concreteAreas]
+      : ["Core Techniques", "Practical Workflows", "Applied Skills", "Integration Project"];
 
+  // Stretch with numbered applied modules derived from the last concrete topic — never "Foundations".
   while (areas.length < minMilestones) {
-    areas.push(`Applied Practice ${areas.length + 1}`);
+    const base = areas[areas.length - 1] ?? "Applied Techniques";
+    areas.push(`${base} Practice ${areas.length + 1}`);
   }
 
   const selectedAreas = areas.slice(0, cappedDuration);
 
-  const seeds: FallbackMilestoneSeed[] = selectedAreas.map((area, index) => ({
-    title: `Week ${index + 1} — ${area}`,
-    description: `Build practical understanding of ${area}.`,
-    topicTitle: area,
-    tasks: [
-      {
-        title: `${area} — Core Lesson`,
-        type: "lesson" as const,
-        durationMinutes: 45,
-        description: `Study the fundamentals of ${area}.`,
-        learningObjectives: [`Explain key ideas in ${area}`],
-      },
-      {
-        title: `${area} — Knowledge Check`,
-        type: "quiz" as const,
-        durationMinutes: 20,
-        description: `Validate progress in ${area}.`,
-        learningObjectives: [`Apply concepts from ${area}`],
-      },
-    ],
-  }));
+  const seeds: FallbackMilestoneSeed[] = selectedAreas.map((area, index) => {
+    const objectives = buildTechnicalObjectives(area);
+
+    return {
+      title: `Week ${index + 1} — ${area}`,
+      description: `Build practical competence in ${area} with worked examples and verification.`,
+      topicTitle: area,
+      tasks: [
+        {
+          title: `${area} — Core Lesson`,
+          type: "lesson" as const,
+          durationMinutes: 45,
+          description: `Learn and practice the technical skills required for ${area}.`,
+          learningObjectives: [objectives[0], objectives[1]],
+        },
+        {
+          title: `${area} — Knowledge Check`,
+          type: "quiz" as const,
+          durationMinutes: 20,
+          description: `Validate technical progress in ${area}.`,
+          learningObjectives: [`Demonstrate correct use of ${area}`],
+        },
+      ],
+    };
+  });
 
   return fallbackSeedToAiMilestones(seeds, cappedDuration);
 }
@@ -246,11 +286,7 @@ export function buildUniversalFallbackMilestones(
   input: OnboardingInput,
   context: RoadmapGenerationContext | undefined,
 ): AiRoadmapMilestone[] {
-  const focusAreas =
-    context?.recommendedFocusAreas ??
-    (context?.goal ? [context.goal] : [input.goalTitle]);
-
-  return buildCustomFallbackMilestones(focusAreas, input.durationWeeks);
+  return buildCustomFallbackMilestones(resolveDomainFocusAreas(input, context), input.durationWeeks);
 }
 
 export function resolveDeterministicFallbackMilestones(

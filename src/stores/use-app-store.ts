@@ -109,6 +109,28 @@ function mergeEngineResultIntoState(
   };
 }
 
+const GENERIC_PERSISTED_TOPIC_IDS = new Set([
+  "foundations",
+  "core-concepts",
+  "basics",
+  "introduction",
+  "review",
+  "applied-practice",
+  "overview",
+  "fundamentals",
+  "practice",
+]);
+
+function roadmapUsesGenericTopicMajority(roadmap: Roadmap): boolean {
+  const topicIds = [...new Set(roadmap.tasks.map((task) => task.topicId))];
+  if (topicIds.length === 0) {
+    return false;
+  }
+
+  const genericCount = topicIds.filter((topicId) => GENERIC_PERSISTED_TOPIC_IDS.has(topicId)).length;
+  return genericCount >= Math.ceil(topicIds.length * 0.5);
+}
+
 function validatePersistedState(persisted: unknown): PersistedAppState | null {
   if (!persisted || typeof persisted !== "object") {
     return null;
@@ -136,7 +158,14 @@ function validatePersistedState(persisted: unknown): PersistedAppState | null {
     if (!roadmapResult.success) {
       return null;
     }
-    candidate.roadmap = roadmapResult.data;
+    // Drop stale Foundations-style roadmaps so they cannot resurrect after curriculum fixes.
+    if (roadmapUsesGenericTopicMajority(roadmapResult.data)) {
+      candidate.roadmap = null;
+      candidate.twin = null;
+      candidate.isInitialized = false;
+    } else {
+      candidate.roadmap = roadmapResult.data;
+    }
   }
 
   return {

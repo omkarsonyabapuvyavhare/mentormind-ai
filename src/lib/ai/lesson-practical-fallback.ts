@@ -4,6 +4,7 @@ import type {
   PracticalArtifactType,
 } from "@/lib/ai/lesson-schema";
 import type { MentorFallbackContext } from "@/lib/ai/lesson-mentor-fallback";
+import { deriveTopicTeachingConcepts } from "@/lib/ai/lesson-topic-concepts";
 import { formatTopicTitle } from "@/lib/format/topic-title";
 
 const TYPE_SIGNALS: Record<PracticalArtifactType, RegExp[]> = {
@@ -36,11 +37,12 @@ function topicLabel(context: MentorFallbackContext): string {
 }
 
 function conceptFocus(context: MentorFallbackContext): string[] {
-  if (context.learningObjectives?.length) {
-    return context.learningObjectives;
-  }
-
-  return [topicLabel(context)];
+  return deriveTopicTeachingConcepts({
+    topicTitle: topicLabel(context),
+    topicId: context.topicId,
+    goalTitle: context.goalTitle,
+    goalCategory: context.goalCategory,
+  });
 }
 
 function contextCorpus(context: MentorFallbackContext): string {

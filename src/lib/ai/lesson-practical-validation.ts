@@ -149,7 +149,7 @@ function exerciseIsConcrete(exercise: HandsOnExercise): boolean {
   }
 
   const actionSignals =
-    /\b(fix|debug|write|run|implement|complete|identify|correct|add|remove|change|configure|deploy|query|calculate|trace|analyze)\b/i;
+    /\b(fix|debug|write|run|implement|complete|identify|correct|add|remove|change|configure|deploy|query|calculate|trace|analyze|create|declare|assign|print|execute|build|update|select|insert|filter|define|modify|refactor|test|verify|set|edit|extend|compute|join|group)\b/i;
   return actionSignals.test(combined) && exercise.instructions.length >= 1 && exercise.expectedOutcome.trim().length >= 12;
 }
 

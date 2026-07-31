@@ -15,6 +15,7 @@
 /test-results
 /playwright-report
 /runtime-screenshots
+/.tmp
 
 # next.js
 /.next/

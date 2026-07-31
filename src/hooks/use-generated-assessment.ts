@@ -80,7 +80,11 @@ export function useGeneratedAssessment(topicId: string) {
             heading: section.heading,
             summary: section.summary,
             content: section.content,
+            commonMistakes: section.commonMistakes,
+            practicalExample: section.practicalExample,
           })),
+          practicalArtifact: lesson.practicalArtifact,
+          handsOnExercise: lesson.handsOnExercise,
         });
       }
 

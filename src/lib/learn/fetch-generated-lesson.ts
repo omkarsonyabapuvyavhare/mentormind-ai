@@ -1,5 +1,10 @@
 ﻿import { createDeterministicLessonForLearner, type LessonFallbackContext } from "@/lib/ai/lesson-fallback";
 import { logApiFallbackTransparency } from "@/lib/dev/architecture-log";
+import {
+  displaySourceFromOriginal,
+  reportLessonSource,
+  type LessonOriginalSource,
+} from "@/lib/dev/lesson-source-observability";
 import { enrichLessonWithPracticalBlocks, lessonHasPracticalBlocks } from "@/lib/learn/enrich-lesson-practical";
 import { recordLessonFetchTiming } from "@/lib/learn/lesson-fetch-timing";
 import {
@@ -18,8 +23,9 @@ function lessonRequestKey(goalId: string, topicId: string): string {
 function cacheAndReturn(
   goalId: string,
   payload: GeneratedLessonPayload,
+  originalSource?: LessonOriginalSource,
 ): GeneratedLessonPayload {
-  writeCachedLesson(goalId, payload);
+  writeCachedLesson(goalId, payload, originalSource);
   return payload;
 }
 
@@ -58,6 +64,7 @@ function buildFallbackPayload(
   request: GenerateLessonRequest,
   reason: string,
 ): GeneratedLessonPayload {
+  const startedAt = Date.now();
   const fallback = createDeterministicLessonForLearner(
     {
       goalId: request.goalId,
@@ -86,7 +93,23 @@ function buildFallbackPayload(
     topicId: request.topicId,
   });
 
-  return cacheAndReturn(request.goalId, normalizeLessonPayload(request, payload));
+  reportLessonSource({
+    goalTitle: request.goalTitle,
+    topicTitle: request.topicTitle,
+    goalId: request.goalId,
+    topicId: request.topicId,
+    displaySource: "Deterministic Fallback",
+    originalSource: "deterministic",
+    cache: "MISS",
+    reason: `Client fallback: ${reason}`,
+    generationTimeMs: Date.now() - startedAt,
+  });
+
+  return cacheAndReturn(
+    request.goalId,
+    normalizeLessonPayload(request, payload),
+    "deterministic",
+  );
 }
 
 async function fetchGeneratedLessonInternal(
@@ -149,13 +172,32 @@ async function fetchGeneratedLessonInternal(
       topicId: request.topicId,
     });
 
+    const generationPath: LessonOriginalSource =
+      validated.data.generationPath ??
+      (validated.data.source === "ai" ? "ai" : "deterministic");
+
+    reportLessonSource({
+      goalTitle: request.goalTitle,
+      topicTitle: request.topicTitle,
+      goalId: request.goalId,
+      topicId: request.topicId,
+      displaySource: displaySourceFromOriginal(generationPath),
+      originalSource: generationPath,
+      cache: "MISS",
+      reason: validated.data.fallbackReason,
+    });
+
     const payload: GeneratedLessonPayload = {
       ...validated.data.lesson,
       topicId: request.topicId,
       source: validated.data.source,
     };
 
-    return cacheAndReturn(request.goalId, normalizeLessonPayload(request, payload));
+    return cacheAndReturn(
+      request.goalId,
+      normalizeLessonPayload(request, payload),
+      generationPath,
+    );
   } catch {
     return buildFallbackPayload(request, "network");
   }

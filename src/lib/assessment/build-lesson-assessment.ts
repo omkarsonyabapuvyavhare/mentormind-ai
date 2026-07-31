@@ -1,9 +1,9 @@
 import { slugifyTitle } from "@/lib/ai/slug-id";
 import type { GeneratedLessonPayload } from "@/lib/learn/lesson-response-schema";
-import type { GoalCategory } from "@/lib/goals/goal-identity";
 import {
   filterValidLessonQuestions,
   selectDiverseAssessmentQuestions,
+  validateAssessmentQuestionQuality,
 } from "@/lib/assessment/assessment-question-quality";
 import {
   assessmentQuestionSchema,
@@ -100,8 +100,28 @@ function buildFallbackInput(lesson: GeneratedLessonPayload, context: AssessmentV
       heading: section.heading,
       summary: section.summary,
       content: section.content,
+      commonMistakes: section.commonMistakes,
+      practicalExample: section.practicalExample,
     })),
+    practicalArtifact: lesson.practicalArtifact,
+    handsOnExercise: lesson.handsOnExercise,
   };
+}
+
+function buildFallbackAssessment(
+  lesson: GeneratedLessonPayload,
+  context: AssessmentValidationContext,
+): TopicAssessment {
+  return topicAssessmentSchema.parse({
+    topicId: lesson.topicId,
+    passingScore: PASSING_SCORE,
+    questions: buildDeterministicAssessmentQuestions({
+      ...buildFallbackInput(lesson, context),
+      startIndex: 0,
+      count: TARGET_ASSESSMENT_QUESTIONS,
+    }),
+    source: "fallback",
+  });
 }
 
 function supplementQuestions(
@@ -130,17 +150,50 @@ export function buildAssessmentFromLesson(
   context: AssessmentValidationContext,
 ): TopicAssessment {
   const extracted = filterValidLessonQuestions(extractLessonQuestions(lesson));
-  let questions = selectDiverseAssessmentQuestions(extracted, TARGET_ASSESSMENT_QUESTIONS);
-  let source: TopicAssessment["source"] = "lesson";
+
+  // Blend lesson knowledge checks with artifact/exercise/core seeds so the five
+  // questions cover distinct technical signals instead of five similar section checks.
+  let technicalSeeds: AssessmentQuestion[] = [];
+  try {
+    technicalSeeds = buildDeterministicAssessmentQuestions({
+      ...buildFallbackInput(lesson, context),
+      startIndex: 0,
+      count: TARGET_ASSESSMENT_QUESTIONS,
+    });
+  } catch {
+    technicalSeeds = [];
+  }
+
+  const preferredPool = [
+    ...technicalSeeds.filter((question) =>
+      /practical-artifact|hands-on-exercise|common-misconception|key-takeaway|core-explanation/i.test(
+        question.conceptTag,
+      ),
+    ),
+    ...extracted,
+    ...technicalSeeds,
+  ];
+
+  let questions = selectDiverseAssessmentQuestions(preferredPool, TARGET_ASSESSMENT_QUESTIONS);
+  let source: TopicAssessment["source"] =
+    extracted.length > 0 && technicalSeeds.length > 0
+      ? "hybrid"
+      : extracted.length > 0
+        ? "lesson"
+        : "fallback";
 
   if (questions.length < TARGET_ASSESSMENT_QUESTIONS) {
-    questions = supplementQuestions(lesson, context, questions);
-    source = extracted.length > 0 ? "hybrid" : "fallback";
+    try {
+      questions = supplementQuestions(lesson, context, questions);
+      source = extracted.length > 0 ? "hybrid" : "fallback";
+    } catch {
+      return buildFallbackAssessment(lesson, context);
+    }
   }
 
   questions = questions.slice(0, TARGET_ASSESSMENT_QUESTIONS);
 
-  const assessment = topicAssessmentSchema.parse({
+  let assessment = topicAssessmentSchema.parse({
     topicId: lesson.topicId,
     passingScore: PASSING_SCORE,
     questions,
@@ -148,18 +201,24 @@ export function buildAssessmentFromLesson(
   });
 
   const structureError = validateAssessmentForGoal(assessment, context);
+  const qualityError = validateAssessmentQuestionQuality(assessment.questions);
 
-  if (structureError) {
-    return topicAssessmentSchema.parse({
-      topicId: lesson.topicId,
-      passingScore: PASSING_SCORE,
-      questions: buildDeterministicAssessmentQuestions({
-        ...buildFallbackInput(lesson, context),
-        startIndex: 0,
-        count: TARGET_ASSESSMENT_QUESTIONS,
-      }),
-      source: "fallback",
-    });
+  if (!structureError && !qualityError) {
+    return assessment;
+  }
+
+  // Regenerate once from deterministic technical fallback.
+  assessment = buildFallbackAssessment(lesson, context);
+
+  const fallbackStructureError = validateAssessmentForGoal(assessment, context);
+  const fallbackQualityError = validateAssessmentQuestionQuality(assessment.questions);
+
+  if (fallbackStructureError || fallbackQualityError) {
+    throw new Error(
+      fallbackQualityError ??
+        fallbackStructureError ??
+        "Unable to build a valid distinct technical assessment.",
+    );
   }
 
   return assessment;

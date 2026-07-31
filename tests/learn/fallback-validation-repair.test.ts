@@ -94,12 +94,12 @@ describe("fallback validation repair", () => {
 
     expect(knowledgeChecks).toBe(REQUIRED_LESSON_KNOWLEDGE_CHECKS);
     expect(lesson.sections).toHaveLength(8);
-    expect(JSON.stringify(lesson)).toContain("Declare variables");
+    expect(JSON.stringify(lesson)).toMatch(/int|float|bool|str|assignment|print\(/i);
     expect(containsLessonMetaLanguage(JSON.stringify(lesson))).toBe(false);
     expect(findLessonValidationIssues(lesson.sections)).toHaveLength(0);
   });
 
-  it("Python fallback renders real technical objectives without runtime failure", () => {
+  it("Python fallback teaches topic concepts without echoing objectives", () => {
     const { lesson } = createDeterministicLessonForLearner({
       goalId: "learn-python",
       goalSlug: "learn-python",
@@ -112,8 +112,9 @@ describe("fallback validation repair", () => {
     });
 
     const body = JSON.stringify(lesson);
-    expect(body).toContain("Declare variables");
+    expect(body).toMatch(/int|float|bool|str|assignment|print\(/i);
     expect(body).toContain("Python Syntax and Basic Data Types");
+    expect(body).not.toMatch(/Declare variables: state the precise definition/i);
     expect(containsLessonMetaLanguage(body)).toBe(false);
     expect(containsGenericLessonPhrases(body)).toBe(false);
   });

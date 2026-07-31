@@ -5,6 +5,7 @@ import {
   findLastWeakQuizDecisionIndex,
   hasInactivityAfterDecisionIndex,
 } from "@/lib/demo/engagement-timeline-reset";
+import { isPresenterModeEnabledByEnv } from "@/lib/presenter/presenter-mode";
 import { selectTodayMission } from "@/lib/tutor/mission";
 import type { AppState } from "@/stores/store-types";
 import {
@@ -133,7 +134,8 @@ function hasWeakQuizSignal(state: AppState): boolean {
 }
 
 export function shouldShowInactivityShortcut(state: AppState): boolean {
-  if (!state.presenterMode) {
+  // Prefer store flag; also honor build-time NEXT_PUBLIC_PRESENTER_MODE for Vercel bundles.
+  if (!state.presenterMode && !isPresenterModeEnabledByEnv()) {
     return false;
   }
 

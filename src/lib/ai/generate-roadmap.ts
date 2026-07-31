@@ -58,6 +58,10 @@ Rules:
 - Progress from fundamentals to advanced concepts.
 - Create content for the learner's actual goal, category, and type.
 - Do not assume every learner is preparing for a certification.
+- topicTitle values MUST be concrete technical concepts for the domain (examples: "Pandas DataFrames", "JSX", "WHERE", "NumPy Arrays").
+- NEVER use generic topicTitle values such as "Foundations", "Core Concepts", "Introduction", "Basics", "Review", or "Applied Practice".
+- learningObjectives must be technical and actionable. Never use "Explain key ideas in …".
+- Prefer recommendedFocusAreas when they are domain-specific; otherwise infer a concrete curriculum from the goal.
 - Programming goals should progress through fundamentals, practice, and projects.
 - Cloud certification goals may include exam prep only when goalType is Certification.
 - Never insert AWS-specific topics unless the goal is AWS-related.

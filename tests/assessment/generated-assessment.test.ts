@@ -43,6 +43,18 @@ function buildSampleLesson(overrides: Partial<GeneratedLessonPayload> = {}): Gen
       "Compare CapEx and OpEx in Azure",
       "Describe shared responsibility in Azure",
     ],
+    practicalArtifact: {
+      type: "workflow",
+      title: "Choose an Azure service model",
+      content: "1. Identify ownership needs\n2. Map to IaaS/PaaS/SaaS\n3. Validate shared responsibility",
+      explanation: "Match the Azure service model to how much infrastructure the team manages.",
+    },
+    handsOnExercise: {
+      instructions: ["Pick a workload", "Choose IaaS, PaaS, or SaaS", "List customer responsibilities"],
+      hints: ["PaaS reduces OS patching burden"],
+      expectedOutcome: "A justified Azure service model with responsibility boundaries listed.",
+      solutionExplanation: "Ownership needs determine whether IaaS, PaaS, or SaaS fits.",
+    },
     sections: [
       {
         heading: "Cloud service models",
@@ -131,6 +143,20 @@ function buildKubernetesLesson(): GeneratedLessonPayload {
       "Differentiate Services and Ingress",
       "Identify common networking mistakes",
     ],
+    practicalArtifact: {
+      type: "configuration",
+      title: "Service manifest",
+      language: "yaml",
+      content: "apiVersion: v1\nkind: Service\nmetadata:\n  name: demo\nspec:\n  selector:\n    app: demo",
+      expectedOutput: "service/demo created",
+      explanation: "A Service provides a stable endpoint for selected pods.",
+    },
+    handsOnExercise: {
+      instructions: ["Apply the Service", "Verify endpoints"],
+      hints: ["Check selector labels"],
+      expectedOutcome: "Service routes to matching pods",
+      solutionExplanation: "Selectors bind the Service to pod labels.",
+    },
     sections: [
       {
         heading: "Pod networking",
@@ -249,7 +275,7 @@ describe("generated assessment builder", () => {
       goalCategory: "Cloud",
     });
 
-    expect(assessment.source).toBe("lesson");
+    expect(["lesson", "hybrid"]).toContain(assessment.source);
     expect(assessment.questions.length).toBe(5);
     expect(assessment.questions.some((question) => /service model|azure/i.test(question.prompt))).toBe(
       true,
@@ -262,8 +288,37 @@ describe("generated assessment builder", () => {
       topicTitle: "Java Syntax and Variables",
       goalSlug: "learn-java",
       goalCategory: "Programming",
-      learningObjectives: ["Declare Java variables"],
-      sections: [{ heading: "Java Syntax", summary: ["Use valid declarations"], content: "..." }],
+      learningObjectives: ["Declare Java variables", "Use primitive types", "Apply assignment"],
+      sections: [
+        {
+          heading: "Core Explanation",
+          summary: ["Java uses type-first declarations such as int count = 10"],
+          content: "Java variables require an explicit type before the name.",
+          commonMistakes: ["Using Python-style untyped declarations in Java"],
+        },
+        {
+          heading: "Practical Example",
+          summary: ["Assignment updates the stored value"],
+          content: "After int x = 5; x = x + 2; the value is 7.",
+          commonMistakes: ["Assuming assignment concatenates numbers as strings"],
+        },
+      ],
+      practicalArtifact: {
+        type: "code",
+        title: "Java variable declaration",
+        language: "java",
+        content: "int count = 10;\nSystem.out.println(count);",
+        expectedOutput: "10",
+        explanation: "Java declares the type before the variable name.",
+      },
+      handsOnExercise: {
+        instructions: ["Fix the invalid declaration", "Print the value"],
+        starterContent: "integer count = 10;",
+        hints: ["Use int, not integer"],
+        expectedOutcome: "A valid int declaration that prints 10",
+        solution: "int count = 10;",
+        solutionExplanation: "Java primitive declarations use int.",
+      },
     });
 
     expect(assessment.questions).toHaveLength(5);
@@ -279,8 +334,31 @@ describe("generated assessment builder", () => {
       topicTitle: "Python Basics",
       goalSlug: "learn-python",
       goalCategory: "Programming",
-      learningObjectives: ["Declare Python variables"],
-      sections: [{ heading: "Python Basics", summary: ["Use valid assignments"], content: "..." }],
+      learningObjectives: ["Declare Python variables", "Inspect types with type()"],
+      sections: [
+        {
+          heading: "Core Explanation",
+          summary: ["Python assigns with name = value"],
+          content: "Python uses dynamic typing with simple assignment.",
+          commonMistakes: ["Writing int count = 10 as if it were Java"],
+        },
+      ],
+      practicalArtifact: {
+        type: "code",
+        title: "Python types",
+        language: "python",
+        content: "count = 10\nprint(type(count))",
+        expectedOutput: "<class 'int'>",
+        explanation: "type(count) reports int for integer literals.",
+      },
+      handsOnExercise: {
+        instructions: ["Fix the assignment", "Print the type"],
+        starterContent: "int count = 10",
+        hints: ["Drop the type prefix"],
+        expectedOutcome: "count = 10 with type int",
+        solution: "count = 10",
+        solutionExplanation: "Python does not use Java-style type prefixes.",
+      },
     });
 
     expect(assessment.questions).toHaveLength(5);
@@ -434,48 +512,52 @@ describe("assessment routing and cache", () => {
   });
 
   it("rejects stale 3-question session cache and clears storage", () => {
-    window.sessionStorage.setItem(
-      "mentormind-assessment-cache:learn-python:python-basics",
-      JSON.stringify({
-        topicId: "python-basics",
-        passingScore: 70,
-        source: "lesson",
-        questions: [
-          {
-            id: "q1",
-            topicId: "python-basics",
-            conceptTag: "one",
-            prompt: "Question 1?",
-            options: ["A", "B", "C", "D"],
-            correctIndex: 0,
-            explanation: "Because A.",
-          },
-          {
-            id: "q2",
-            topicId: "python-basics",
-            conceptTag: "two",
-            prompt: "Question 2?",
-            options: ["A", "B", "C", "D"],
-            correctIndex: 0,
-            explanation: "Because A.",
-          },
-          {
-            id: "q3",
-            topicId: "python-basics",
-            conceptTag: "three",
-            prompt: "Question 3?",
-            options: ["A", "B", "C", "D"],
-            correctIndex: 0,
-            explanation: "Because A.",
-          },
-        ],
-      }),
-    );
+    const legacyKey = "mentormind-assessment-cache:learn-python:python-basics";
+    const previousKey = "mentormind-assessment-cache:v2:learn-python:python-basics";
+    const currentKey = "mentormind-assessment-cache:v3:learn-python:python-basics";
+    const stalePayload = JSON.stringify({
+      topicId: "python-basics",
+      passingScore: 70,
+      source: "lesson",
+      questions: [
+        {
+          id: "q1",
+          topicId: "python-basics",
+          conceptTag: "one",
+          prompt: "Question 1?",
+          options: ["A", "B", "C", "D"],
+          correctIndex: 0,
+          explanation: "Because A.",
+        },
+        {
+          id: "q2",
+          topicId: "python-basics",
+          conceptTag: "two",
+          prompt: "Question 2?",
+          options: ["A", "B", "C", "D"],
+          correctIndex: 0,
+          explanation: "Because A.",
+        },
+        {
+          id: "q3",
+          topicId: "python-basics",
+          conceptTag: "three",
+          prompt: "Question 3?",
+          options: ["A", "B", "C", "D"],
+          correctIndex: 0,
+          explanation: "Because A.",
+        },
+      ],
+    });
+
+    window.sessionStorage.setItem(legacyKey, stalePayload);
+    window.sessionStorage.setItem(previousKey, stalePayload);
+    window.sessionStorage.setItem(currentKey, stalePayload);
 
     expect(readCachedAssessment("learn-python", "python-basics")).toBeNull();
-    expect(
-      window.sessionStorage.getItem("mentormind-assessment-cache:learn-python:python-basics"),
-    ).toBeNull();
+    expect(window.sessionStorage.getItem(legacyKey)).toBeNull();
+    expect(window.sessionStorage.getItem(previousKey)).toBeNull();
+    expect(window.sessionStorage.getItem(currentKey)).toBeNull();
   });
 
   it("demo mode keeps the stable AWS VPC assessment route", () => {
@@ -508,8 +590,33 @@ describe("deterministic supplemental questions", () => {
       topicTitle: "Cloud Concepts",
       goalSlug: "azure-fundamentals",
       goalCategory: "Cloud",
-      learningObjectives: ["Explain cloud service models"],
-      sections: [{ heading: "Cloud Concepts", summary: ["Understand Azure cloud models"], content: "..." }],
+      learningObjectives: ["Explain cloud service models", "Compare CapEx and OpEx"],
+      sections: [
+        {
+          heading: "Core Explanation",
+          summary: ["Understand Azure cloud models"],
+          content: "Azure supports IaaS, PaaS, and SaaS.",
+          commonMistakes: ["Assuming SaaS removes all responsibility"],
+        },
+        {
+          heading: "Key Takeaways",
+          summary: ["Match Azure service models to ownership needs"],
+          content: "Ownership determines the right Azure model.",
+          commonMistakes: ["Ignoring shared responsibility"],
+        },
+      ],
+      practicalArtifact: {
+        type: "workflow",
+        title: "Azure model choice",
+        content: "1. Identify ownership\n2. Choose IaaS/PaaS/SaaS",
+        explanation: "Azure model choice depends on operational ownership.",
+      },
+      handsOnExercise: {
+        instructions: ["Choose a model for a web app"],
+        hints: ["PaaS reduces OS patching"],
+        expectedOutcome: "PaaS selected with responsibilities listed",
+        solutionExplanation: "PaaS fits managed runtime needs.",
+      },
       count: 5,
     });
 

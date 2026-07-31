@@ -10,6 +10,10 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { theme } from "@/constants/theme";
 import { usePresenterControlActions } from "@/hooks/use-presenter-control-actions";
 import type { TopicAssessment } from "@/lib/assessment/assessment-schema";
+import {
+  getPresenterModeEnvRaw,
+  isPresenterModeEnabledByEnv,
+} from "@/lib/presenter/presenter-mode";
 import { useAppStore } from "@/stores/use-app-store";
 
 export type PresenterControlsLayout = "inline" | "floating";
@@ -117,7 +121,7 @@ export function PresenterControls({
   const pathname = usePathname();
   const presenterMode = useAppStore((state) => state.presenterMode);
   const syncPresenterMode = useAppStore((state) => state.syncPresenterMode);
-  const envPresenterMode = process.env.NEXT_PUBLIC_PRESENTER_MODE === "true";
+  const envPresenterMode = isPresenterModeEnabledByEnv();
   const showAssessmentControls = envPresenterMode || presenterMode;
   const showDashboardControls = presenterMode || envPresenterMode;
   const showPresenterControls =
@@ -132,15 +136,15 @@ export function PresenterControls({
   const onFastForward = handlers?.onFastForward ?? handleFastForward;
 
   useEffect(() => {
-    if (presenterMode) {
+    if (presenterMode || envPresenterMode) {
       return;
     }
 
     syncPresenterMode(undefined, "presenter-controls:self-heal");
-  }, [presenterMode, syncPresenterMode]);
+  }, [envPresenterMode, presenterMode, syncPresenterMode]);
 
   useEffect(() => {
-    if (!presenterMode) {
+    if (!showPresenterControls) {
       return;
     }
 
@@ -167,46 +171,34 @@ export function PresenterControls({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleReset, masteryScore, presenterMode, simulate, weakScore]);
+  }, [handleReset, masteryScore, showPresenterControls, simulate, weakScore]);
+
+  useEffect(() => {
+    // Temporary production-safe diagnostics for Vercel presenter visibility.
+    console.info({
+      envPresenterMode,
+      presenterMode,
+      pathname,
+      envRaw: getPresenterModeEnvRaw() ?? null,
+      variant,
+      showPresenterControls,
+      shortcutsOnly,
+    });
+  }, [
+    envPresenterMode,
+    pathname,
+    presenterMode,
+    shortcutsOnly,
+    showPresenterControls,
+    variant,
+  ]);
 
   if (
     !showPresenterControls ||
     (variant === "assessment" && !isAssessmentRoute) ||
     (variant === "dashboard" && !isDashboardRoute)
   ) {
-    if (process.env.NODE_ENV === "development") {
-      console.info("[PresenterControls]", {
-        variant,
-        layout,
-        pathname,
-        presenterMode,
-        envPresenterMode,
-        showAssessmentControls,
-        showDashboardControls,
-        isAssessmentRoute,
-        isDashboardRoute,
-        assessmentProvided: Boolean(assessment),
-        rendered: false,
-      });
-    }
     return null;
-  }
-
-  if (process.env.NODE_ENV === "development") {
-    console.info("[PresenterControls]", {
-      variant,
-      layout,
-      pathname,
-      presenterMode,
-      envPresenterMode,
-      showAssessmentControls,
-      showDashboardControls,
-      isAssessmentRoute,
-      isDashboardRoute,
-      assessmentProvided: Boolean(assessment),
-      shortcutsOnly,
-      rendered: !shortcutsOnly,
-    });
   }
 
   if (shortcutsOnly) {

@@ -208,19 +208,21 @@ describe("deterministic lesson fallbacks", () => {
 
     const body = JSON.stringify(lesson);
     expect(lesson.sections[0].content).toContain("Python Syntax and Basic Data Types");
-    expect(body).toContain("Declare variables");
+    expect(body).toMatch(/int|float|bool|str|assignment|print\(/i);
     expect(body).not.toMatch(/today you will work through/i);
     expect(body).not.toMatch(/your roadmap/i);
     expect(body).not.toMatch(/session focus/i);
     expect(containsLessonMetaLanguage(body)).toBe(false);
   });
 
-  it("SQL fallback uses objectives as technical focus", () => {
+  it("SQL fallback teaches JOIN concepts from the topic title", () => {
     const lesson = createDeterministicLessonForLearner(fallbackContext(sqlInput)).lesson;
 
-    const body = JSON.stringify(lesson);
-    expect(body).toContain("INNER and LEFT JOINs");
-    expect(body).toContain("join cardinality");
+    const body = JSON.stringify(lesson.sections);
+    expect(body).toMatch(/INNER JOIN/i);
+    expect(body).toMatch(/LEFT JOIN/i);
+    expect(body).toMatch(/cardinality/i);
+    expect(body).not.toMatch(/Write INNER and LEFT JOINs/i);
     expect(containsLessonMetaLanguage(body)).toBe(false);
   });
 

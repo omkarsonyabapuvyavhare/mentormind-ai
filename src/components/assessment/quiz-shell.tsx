@@ -69,17 +69,18 @@ export function QuizShell({ assessment }: { assessment: TopicAssessment }) {
   const pendingScoreRef = useRef(0);
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development" || phase !== "taking") {
+    if (phase !== "taking") {
       return;
     }
 
-    console.info("[QuizShell]", {
+    // Temporary production-safe diagnostics for Vercel presenter visibility.
+    console.info({
+      envPresenterMode,
+      presenterMode,
+      pathname: "/assessment",
       shouldRenderPresenterControls: showInlinePresenterControls,
-      hasAssessment: Boolean(assessment),
-      phase,
-      questionCount: assessment.questions.length,
     });
-  }, [assessment, phase, showInlinePresenterControls]);
+  }, [envPresenterMode, phase, presenterMode, showInlinePresenterControls]);
 
   const finishAnalysis = useCallback(() => {
     setPhase("reasoning");

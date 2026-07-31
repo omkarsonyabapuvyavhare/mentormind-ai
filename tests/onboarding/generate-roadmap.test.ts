@@ -97,6 +97,31 @@ describe("deterministic roadmap fallbacks", () => {
     expect(result.roadmap.milestones.length).toBeGreaterThanOrEqual(4);
     expect(JSON.stringify(result.roadmap).toLowerCase()).not.toContain("aws global infrastructure");
   });
+
+  it("Data Science goal produces domain topics instead of Foundations", () => {
+    const result = createDeterministicRoadmapFromOnboarding(
+      buildTestOnboardingInput({
+        goalSlug: "learn-data-science",
+        goalTitle: "Learn Data Science",
+        goalCategory: "Data",
+        goalType: "Skill",
+        durationWeeks: 8,
+      }),
+      TWIN_ID,
+      START,
+      {
+        goal: "Learn Data Science",
+        recommendedFocusAreas: ["Foundations", "Core Concepts", "Applied Practice", "Review"],
+      },
+    );
+
+    const topicTitles = result.roadmap.milestones.map((milestone) => milestone.title);
+    expect(topicTitles.some((title) => /pandas|numpy|python for data science|data cleaning/i.test(title))).toBe(
+      true,
+    );
+    expect(JSON.stringify(result.roadmap)).not.toMatch(/Explain key ideas in/i);
+    expect(result.roadmap.tasks.some((task) => /foundations — core lesson/i.test(task.title))).toBe(false);
+  });
 });
 
 describe("roadmap normalization", () => {

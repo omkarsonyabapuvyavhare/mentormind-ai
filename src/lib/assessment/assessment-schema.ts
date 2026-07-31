@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { validateAssessmentQuestionQuality } from "@/lib/assessment/assessment-question-quality";
 import { validateContentForGoalCategory } from "@/lib/goals/domain-validation";
 import type { GoalCategory } from "@/lib/goals/goal-identity";
 
@@ -86,5 +87,5 @@ export function validateAssessmentForGoal(
     return contentError;
   }
 
-  return null;
+  return validateAssessmentQuestionQuality(assessment.questions);
 }

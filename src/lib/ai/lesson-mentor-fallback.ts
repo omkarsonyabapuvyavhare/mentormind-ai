@@ -8,9 +8,14 @@ import {
   LESSON_META_LANGUAGE_PATTERNS,
   type LessonFieldValidationIssue,
 } from "@/lib/ai/lesson-schema";
+import { setServerLessonFallbackPath } from "@/lib/dev/lesson-source-observability";
 import type { GoalCategory } from "@/lib/goals/goal-identity";
 import { formatTopicTitle } from "@/lib/format/topic-title";
 import { buildFallbackPracticalBlocks } from "@/lib/ai/lesson-practical-fallback";
+import {
+  buildTopicLectureBody,
+  deriveTopicTeachingConcepts,
+} from "@/lib/ai/lesson-topic-concepts";
 
 export type SkillLevel = "beginner" | "intermediate" | "advanced";
 
@@ -47,12 +52,14 @@ function topicLabel(context: MentorFallbackContext): string {
   return context.topicTitle || formatTopicTitle(context.topicId);
 }
 
+/** Teachable concepts derived from the topic — never from learningObjectives. */
 function conceptFocus(context: MentorFallbackContext): string[] {
-  if (context.learningObjectives?.length) {
-    return context.learningObjectives;
-  }
-
-  return [topicLabel(context)];
+  return deriveTopicTeachingConcepts({
+    topicTitle: topicLabel(context),
+    topicId: context.topicId,
+    goalTitle: context.goalTitle,
+    goalCategory: context.goalCategory,
+  });
 }
 
 function levelDepth(level: SkillLevel): string {
@@ -66,17 +73,40 @@ function levelDepth(level: SkillLevel): string {
   }
 }
 
+function slugifyHeadingForTag(heading: string): string {
+  const normalized = heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (/lesson-overview|learning-goals?|roadmap|study-tips/.test(normalized)) {
+    return "topic-introduction";
+  }
+  return normalized.slice(0, 24) || "concept";
+}
+
 function buildKnowledgeCheck(
+  sectionHeading: string,
   topic: string,
   conceptTag: string,
   correct: string,
   distractors: [string, string, string],
 ): LessonSection["knowledgeCheck"][number] {
+  const promptByHeading: Record<string, string> = {
+    "Lesson Overview": `Which technical idea is introduced first for ${topic}?`,
+    "Real-World Context": `In a real-world ${topic} scenario, which statement is correct?`,
+    "Core Explanation": `Which description of the core ${topic} mechanism is correct?`,
+    [HANDS_ON_PRACTICE_HEADING]: `When practicing ${topic}, which outcome indicates success?`,
+    "Practical Example": `In the worked ${topic} example, which result is expected?`,
+  };
+
+  const explanationLabel = /lesson overview/i.test(sectionHeading)
+    ? "introductory"
+    : sectionHeading;
+
   return {
-    question: `Which statement about ${topic} is correct?`,
+    question:
+      promptByHeading[sectionHeading] ??
+      `For ${sectionHeading} in ${topic}, which statement is technically correct?`,
     options: [correct, ...distractors] as [string, string, string, string],
     correctIndex: 0,
-    explanation: "This answer matches the concept taught in this section.",
+    explanation: `This answer matches the ${explanationLabel} content for ${topic}.`,
     conceptTag,
   };
 }
@@ -89,13 +119,26 @@ function coreTeachingContent(context: MentorFallbackContext): string {
   }
 
   const topic = topicLabel(context);
+  const lecture = buildTopicLectureBody({
+    topicTitle: topic,
+    topicId: context.topicId,
+    goalTitle: context.goalTitle,
+    goalCategory: context.goalCategory,
+  });
+
+  if (lecture) {
+    return lecture;
+  }
+
   const concepts = conceptFocus(context);
 
-  return concepts
-    .map((concept) => {
-      return `${concept}: state the precise definition, demonstrate behavior with a concrete example, and describe the most common misapplication.`;
-    })
-    .join("\n\n");
+  return [
+    `${topic} is understood through concrete mechanisms, not through restating learning goals.`,
+    ...concepts.map(
+      (concept) =>
+        `${concept}: in ${topic}, define what this means, how it behaves with a concrete example, and how it differs from the nearest mistaken alternative.`,
+    ),
+  ].join("\n\n");
 }
 
 function buildOverviewSection(context: MentorFallbackContext): Omit<LessonSection, "knowledgeCheck"> {
@@ -105,8 +148,9 @@ function buildOverviewSection(context: MentorFallbackContext): Omit<LessonSectio
   return {
     heading: "Lesson Overview",
     content: [
-      `${topic} introduces ${concepts.join("; ")}.`,
-      `This section covers what each idea means, how the pieces connect, and how to apply them with a short worked example and practice task.`,
+      `${topic} is a technical subject practitioners use when they need reliable, understandable results in real systems.`,
+      `Core ideas you will learn: ${concepts.slice(0, 6).join("; ")}.`,
+      `Each idea has a precise meaning, typical inputs or architecture choices, and observable outcomes.`,
       levelDepth(context.skillLevel),
     ].join(" "),
     practicalExample: context.scenarioSeed ?? `Sketch one minimal ${topic} example on paper: inputs, operation, and expected output before running or writing anything.`,
@@ -245,7 +289,7 @@ function buildHandsOnPracticeSection(
 
   return {
     heading: HANDS_ON_PRACTICE_HEADING,
-    content: `Apply ${topic} directly. Complete the exercise below before reading the solution explanation.`,
+    content: `Practice ${topic} with a hands-on task. Complete the exercise below before reading the solution explanation.`,
     practicalExample: `Do the exercise first; use the hints only if you are stuck on ${conceptFocus(context)[0]}.`,
     handsOnPractice: practice,
     commonMistakes: [
@@ -255,7 +299,7 @@ function buildHandsOnPracticeSection(
       `Skipping the think-about prompts and missing a constraint that changes ${topic} behavior`,
     ],
     summary: [
-      `You executed ${conceptFocus(context)[0]} in a concrete ${topic} exercise`,
+      `You practiced ${conceptFocus(context)[0]} with a checkable ${topic} result`,
       `You compared your output to the expected result before reading the explanation`,
       `You can repeat the ${topic} core workflow without the lesson open`,
     ],
@@ -460,13 +504,14 @@ function attachKnowledgeChecks(
     if (checkIndices.includes(sectionIndex) && checkCursor < 5) {
       checks.push(
         buildKnowledgeCheck(
+          section.heading,
           topic,
-          `mentor-s${sectionIndex + 1}-kc1`,
+          `mentor-section-${sectionIndex + 1}-${slugifyHeadingForTag(section.heading)}`,
           section.summary[0],
           [
             section.commonMistakes[0],
             `Ignore definitions and guess ${topic} behavior`,
-            `Apply unrelated techniques instead of ${topic}`,
+            `Use unrelated techniques instead of ${topic}`,
           ],
         ),
       );
@@ -627,17 +672,24 @@ function buildEmergencyTechnicalLesson(
         ? "Include edge cases, trade-offs, and failure modes."
         : "Connect core mechanics to applied decisions.";
 
-  const technicalExplanation = concepts
-    .map(
-      (concept) =>
-        `${concept}: define the mechanism, show one concrete input/output pair, and name the most common misapplication in ${topic}.`,
-    )
-    .join(" ");
+  const lecture =
+    buildTopicLectureBody({
+      topicTitle: topic,
+      topicId: context.topicId,
+      goalTitle: context.goalTitle,
+      goalCategory: context.goalCategory,
+    }) ??
+    concepts
+      .map(
+        (concept) =>
+          `${concept}: define the mechanism, show one concrete input/output pair, and name the most common misapplication in ${topic}.`,
+      )
+      .join(" ");
 
   const rawSections: Omit<LessonSection, "knowledgeCheck">[] = [
     {
       heading: "Lesson Overview",
-      content: `${topic} covers ${concepts.join(", ")}. ${levelNote} Work through the explanation, example, and checks below to verify understanding of ${primary}.`,
+      content: `${topic} is a technical subject covering ${concepts.slice(0, 5).join(", ")}. ${levelNote} The sections below teach these mechanisms with examples and checks — not by restating lesson objectives.`,
       practicalExample: `Write one minimal ${topic} example for ${primary}: inputs, operation, and expected output.`,
       commonMistakes: [
         `Using the wrong type or shape for ${primary} in ${topic}`,
@@ -663,7 +715,7 @@ function buildEmergencyTechnicalLesson(
     },
     {
       heading: "Core Explanation",
-      content: technicalExplanation,
+      content: lecture,
       practicalExample: `Walk through ${primary} in ${topic}: label each input, transformation, and final result.`,
       commonMistakes: [
         `Treating ${primary} as vocabulary instead of a mechanism`,
@@ -678,7 +730,7 @@ function buildEmergencyTechnicalLesson(
     },
     {
       heading: HANDS_ON_PRACTICE_HEADING,
-      content: `Apply ${primary} in ${topic}. Complete the exercise, then compare your result to the expected outcome.`,
+      content: `Practice ${primary} inside ${topic}. Complete the exercise, then compare your result to the expected outcome.`,
       practicalExample: `Attempt the exercise before reading the solution explanation for ${primary}.`,
       handsOnPractice: {
         exercise: `Implement ${primary} in a minimal ${topic} example.`,
@@ -698,7 +750,7 @@ function buildEmergencyTechnicalLesson(
         `Skipping comparison against the expected outcome`,
       ],
       summary: [
-        `You applied ${primary} in ${topic}`,
+        `You practiced ${primary} in ${topic}`,
         `You verified output before reading the solution`,
         `You can repeat the ${topic} workflow independently`,
       ],
@@ -828,6 +880,8 @@ export function buildDeterministicMentorLesson(
   const sanitizedContext = sanitizeMentorContext(context);
   let lesson = assembleDeterministicLesson(sanitizedContext, topicId);
 
+  setServerLessonFallbackPath("deterministic");
+
   let issues = findLessonValidationIssues(lesson.sections);
 
   if (issues.length > 0) {
@@ -841,6 +895,7 @@ export function buildDeterministicMentorLesson(
 
   if (issues.length > 0) {
     logFallbackValidationDiagnostics(issues, "post-repair");
+    setServerLessonFallbackPath("emergency");
     lesson = buildEmergencyTechnicalLesson(sanitizedContext, topicId);
   }
 

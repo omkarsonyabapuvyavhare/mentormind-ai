@@ -134,6 +134,7 @@ describe("universal goal identity", () => {
     ["I want to become a React developer", "Web Development", "Skill", "become-a-react-developer"],
     ["I want to learn Kubernetes", "DevOps", "Skill", "learn-kubernetes"],
     ["I want to master SQL", "Data", "Skill", "master-sql"],
+    ["I want to learn Data Science", "Data", "Skill", "learn-data-science"],
     ["Prepare for AWS SAA", "Cloud", "Certification", "aws-saa-c03"],
     ["Azure Fundamentals AZ-900", "Cloud", "Certification", "azure-fundamentals"],
     ["I want to learn Prompt Engineering", "AI / Machine Learning", "Skill", "learn-prompt-engineering"],
@@ -142,6 +143,52 @@ describe("universal goal identity", () => {
     expect(identity.goalCategory).toBe(category);
     expect(identity.goalType).toBe(type);
     expect(identity.goalSlug).toBe(slug);
+  });
+
+  it("Data Science focus areas are concrete technical topics", () => {
+    const areas = inferFocusAreas("Learn Data Science", "Data");
+
+    expect(areas).toEqual(
+      expect.arrayContaining([
+        "Python for Data Science",
+        "NumPy Arrays",
+        "Pandas DataFrames",
+        "Data Cleaning",
+        "Data Visualization",
+        "Exploratory Data Analysis",
+      ]),
+    );
+    expect(areas.every((area) => !/^(foundations|core concepts|review)$/i.test(area))).toBe(true);
+  });
+
+  it("React and SQL focus areas stay domain-specific", () => {
+    expect(inferFocusAreas("Learn React", "Web Development")).toEqual(
+      expect.arrayContaining(["JSX", "Components", "Props", "State", "Hooks"]),
+    );
+    expect(inferFocusAreas("Learn SQL", "Data")).toEqual(
+      expect.arrayContaining(["SELECT", "WHERE", "ORDER BY", "GROUP BY", "JOINS"]),
+    );
+  });
+
+  it("Docker and Data Engineer use role-specific curricula", () => {
+    expect(inferFocusAreas("Learn Docker", "DevOps")).toEqual(
+      expect.arrayContaining(["Images and Containers", "Dockerfile Instructions", "Docker Compose"]),
+    );
+    expect(inferFocusAreas("Become a Data Engineer", "Data")).toEqual(
+      expect.arrayContaining([
+        "Data Engineering Fundamentals",
+        "ETL and ELT Patterns",
+        "Data Lakes and Warehouses",
+        "Batch and Streaming Pipelines",
+        "Orchestration with Airflow",
+      ]),
+    );
+    expect(inferFocusAreas("Learn Data Engineering", "Data")).toEqual(
+      expect.arrayContaining(["Data Engineering Fundamentals", "Apache Spark Transforms"]),
+    );
+    expect(inferFocusAreas("Learn Docker", "DevOps").some((area) => /^docker fundamentals$/i.test(area))).toBe(
+      false,
+    );
   });
 
   it("never rejects unknown goals in deterministic parsing", () => {
@@ -231,6 +278,38 @@ describe("universal roadmap fallbacks", () => {
 
     expect(JSON.stringify(result.roadmap).toLowerCase()).toContain("python");
     expect(JSON.stringify(result.roadmap).toLowerCase()).not.toContain("amazon ec2");
+  });
+
+  it("Data Science roadmap never falls back to Foundations topics", () => {
+    const parsed = parseGoalIntentDeterministic("I want to learn Data Science");
+    expect(parsed?.goalCategory).toBe("Data");
+    expect(parsed?.recommendedFocusAreas.some((area) => /pandas|numpy|data cleaning/i.test(area))).toBe(
+      true,
+    );
+
+    const result = createDeterministicRoadmapFromOnboarding(
+      buildInput({
+        goalSlug: "learn-data-science",
+        goalTitle: "Learn Data Science",
+        goalCategory: "Data",
+        goalType: "Skill",
+        goalId: "learn-data-science",
+        durationWeeks: 8,
+      }),
+      TWIN_ID,
+      START,
+      {
+        goal: "Learn Data Science",
+        // Simulate the old broken generic focus areas — fallback must replace them.
+        recommendedFocusAreas: ["Foundations", "Core Concepts", "Applied Practice", "Review"],
+      },
+    );
+
+    const haystack = JSON.stringify(result.roadmap);
+    expect(haystack).not.toMatch(/"topicId":"foundations"/i);
+    expect(haystack).not.toMatch(/Explain key ideas in/i);
+    expect(haystack.toLowerCase()).toMatch(/pandas|numpy|data cleaning|python for data science/);
+    expect(result.roadmap.tasks[0]?.title.toLowerCase()).not.toContain("foundations");
   });
 
   it("AWS certification still uses stable seed roadmap", () => {

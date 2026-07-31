@@ -74,6 +74,15 @@ describe("PresenterControls visibility", () => {
     expect(screen.queryByText("Submit 95% Score")).toBeNull();
   });
 
+  it("shows dashboard Fast Forward when only NEXT_PUBLIC_PRESENTER_MODE is true", () => {
+    mockStoreState.presenterMode = false;
+    mockStoreState.isInitialized = true;
+    vi.stubEnv("NEXT_PUBLIC_PRESENTER_MODE", "true");
+
+    render(<PresenterControls variant="dashboard" layout="inline" />);
+    expect(screen.getByText("Fast Forward 3 Days")).toBeTruthy();
+  });
+
   it("hides dashboard panel when shortcutsOnly is enabled", () => {
     mockStoreState.presenterMode = true;
     mockStoreState.isInitialized = true;

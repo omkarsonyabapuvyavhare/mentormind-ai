@@ -1,7 +1,11 @@
 const PRESENTER_SESSION_KEY = "mentormind-presenter-mode";
 
+export function getPresenterModeEnvRaw(): string | undefined {
+  return process.env.NEXT_PUBLIC_PRESENTER_MODE;
+}
+
 export function isPresenterModeEnabledByEnv(): boolean {
-  return process.env.NEXT_PUBLIC_PRESENTER_MODE === "true";
+  return getPresenterModeEnvRaw() === "true";
 }
 
 export function readPresenterModeFromSearch(search: string): boolean {
@@ -85,13 +89,13 @@ export function logPresenterModeTransition({
   storeAfter: boolean;
   resolution: PresenterModeResolution;
 }): void {
-  if (process.env.NODE_ENV !== "development") {
-    return;
-  }
-
+  // Temporary production-safe diagnostics for Vercel presenter visibility.
   console.info("[PresenterMode]", {
     pathname:
       pathname ?? (typeof window !== "undefined" ? window.location.pathname : undefined),
+    envRaw: getPresenterModeEnvRaw() ?? null,
+    envPresenterMode: resolution.envFlag,
+    presenterMode: storeAfter,
     urlFlag: resolution.urlFlag,
     sessionFlag: resolution.sessionFlag,
     storeBefore,
