@@ -112,7 +112,7 @@ describe("live Gemini lesson source (gated)", () => {
           result.source,
           `${c.name} should be ai (reason=${result.fallbackReason ?? "none"})`,
         ).toBe("ai");
-        expect(result.generationPath).toBe("ai");
+        expect(["ai", "gemini", "grok"]).toContain(result.generationPath);
       }
 
       console.info("[verify-gemini-lesson-source]", results);

@@ -42,7 +42,8 @@ describe("parseLearnerIntent service", () => {
 
   it("uses deterministic parsing when no API key is configured", async () => {
     delete process.env.GEMINI_API_KEY;
-    const aiSpy = vi.spyOn(parseIntentAi, "parseGoalIntentWithGemini");
+    delete process.env.XAI_API_KEY;
+    const aiSpy = vi.spyOn(parseIntentAi, "parseGoalIntentWithProviders");
 
     const result = await parseLearnerIntent(AWS_EXAMPLE);
 
@@ -65,7 +66,12 @@ describe("parseLearnerIntent service", () => {
 
   it("uses AI output when Gemini parsing succeeds", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    vi.spyOn(parseIntentAi, "parseGoalIntentWithGemini").mockResolvedValue(VALID_AI_PAYLOAD);
+    vi.spyOn(parseIntentAi, "parseGoalIntentWithProviders").mockResolvedValue({
+      ok: true,
+      parsed: VALID_AI_PAYLOAD,
+      provider: "gemini",
+      model: "mock",
+    });
 
     const result = await parseLearnerIntent(AWS_EXAMPLE);
 
@@ -76,7 +82,12 @@ describe("parseLearnerIntent service", () => {
 
   it("falls back to deterministic parsing on timeout/null AI response", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    vi.spyOn(parseIntentAi, "parseGoalIntentWithGemini").mockResolvedValue(null);
+    delete process.env.XAI_API_KEY;
+    vi.spyOn(parseIntentAi, "parseGoalIntentWithProviders").mockResolvedValue({
+      ok: false,
+      reason: "validation",
+      message: "provider failed",
+    });
 
     const result = await parseLearnerIntent(AWS_EXAMPLE);
 
@@ -90,10 +101,15 @@ describe("parseLearnerIntent service", () => {
 
   it("clamps out-of-range AI values in the final response", async () => {
     process.env.GEMINI_API_KEY = "test-key";
-    vi.spyOn(parseIntentAi, "parseGoalIntentWithGemini").mockResolvedValue({
-      ...VALID_AI_PAYLOAD,
-      durationWeeks: 2,
-      studyHoursPerWeek: 0.5,
+    vi.spyOn(parseIntentAi, "parseGoalIntentWithProviders").mockResolvedValue({
+      ok: true,
+      parsed: {
+        ...VALID_AI_PAYLOAD,
+        durationWeeks: 2,
+        studyHoursPerWeek: 0.5,
+      },
+      provider: "gemini",
+      model: "mock",
     });
 
     const result = await parseLearnerIntent(AWS_EXAMPLE);

@@ -84,7 +84,7 @@ export function LearnerEngagementPanel() {
         {showTimelineControls ? (
           <GlassCard className={`${theme.cards.warning} shrink-0 lg:w-72`}>
             <Badge className={theme.badges.demo}>Fast forward</Badge>
-            <p className="mt-3 text-sm font-medium">Advance timeline</p>
+            <p className="mt-3 text-sm font-medium">Fast Forward Timeline</p>
             <p className="mt-1 text-sm text-muted">
               Advance the learner timeline to show how MentorMind responds to disengagement.
             </p>
@@ -95,7 +95,7 @@ export function LearnerEngagementPanel() {
               onClick={() => void runTimeline()}
             >
               <FastForward className="h-4 w-4" />
-              Fast forward 3 days
+              Fast Forward 3 Days
             </Button>
           </GlassCard>
         ) : showResetTimeline ? (

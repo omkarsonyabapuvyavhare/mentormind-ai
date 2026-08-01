@@ -174,7 +174,7 @@ async function fetchGeneratedLessonInternal(
 
     const generationPath: LessonOriginalSource =
       validated.data.generationPath ??
-      (validated.data.source === "ai" ? "ai" : "deterministic");
+      (validated.data.source === "ai" ? "gemini" : "deterministic");
 
     reportLessonSource({
       goalTitle: request.goalTitle,

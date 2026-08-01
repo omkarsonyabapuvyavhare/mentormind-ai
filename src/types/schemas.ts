@@ -86,6 +86,14 @@ export const taskStatusSchema = z.enum([
   "skipped",
 ]);
 
+const kgProvenanceFields = {
+  knowledgeGraphId: z.string().min(1).max(120).optional(),
+  canonicalTopicId: z.string().min(1).max(120).optional(),
+  prerequisiteIds: z.array(z.string().min(1).max(120)).max(24).optional(),
+  relatedTopicIds: z.array(z.string().min(1).max(120)).max(24).optional(),
+  kgValidationVersion: z.string().min(1).max(64).optional(),
+};
+
 export const milestoneSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -93,6 +101,7 @@ export const milestoneSchema = z.object({
   status: milestoneStatusSchema,
   topicIds: z.array(z.string().min(1)),
   order: z.number().int().nonnegative(),
+  ...kgProvenanceFields,
 });
 
 export const learningTaskSchema = z.object({
@@ -107,6 +116,7 @@ export const learningTaskSchema = z.object({
   injectedBy: z.string().optional(),
   unlocked: z.boolean(),
   learningObjectives: z.array(z.string().min(1).max(200)).max(6).optional(),
+  ...kgProvenanceFields,
 });
 
 export const roadmapSchema = z.object({
@@ -116,6 +126,8 @@ export const roadmapSchema = z.object({
   tasks: z.array(learningTaskSchema),
   version: z.number().int().nonnegative(),
   updatedAt: z.string().datetime(),
+  knowledgeGraphId: z.string().min(1).max(120).optional(),
+  kgValidationVersion: z.string().min(1).max(64).optional(),
 });
 
 export const nudgeSeveritySchema = z.enum(["info", "warning", "urgent"]);

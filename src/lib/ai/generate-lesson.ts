@@ -1,13 +1,22 @@
 ﻿import "server-only";
 
-import { GoogleGenAI } from "@google/genai";
-
 import {
   aiLessonResponseSchema,
   validateAiLessonStructure,
   type AiLessonResponse,
 } from "@/lib/ai/lesson-schema";
-import { isGeminiConfigured } from "@/lib/onboarding/parse-intent-ai";
+import {
+  classifyPipelineFailure,
+  getGeminiModel,
+  isGeminiConfigured,
+  resolveTimeoutMs,
+  runWithProviderFailover,
+  type AiProviderName,
+  type FailoverReason,
+} from "@/lib/ai/providers";
+import { resolveKnowledgeGraph } from "@/knowledge-base/registry";
+import { validateLessonAgainstKg } from "@/knowledge-base/validation";
+import { logKgPipelineDev } from "@/lib/knowledge-graph";
 
 import type { GoalCategory, GoalType } from "@/lib/goals/goal-identity";
 
@@ -25,24 +34,16 @@ export interface GenerateLessonInput {
   preferredFormats: string[];
 }
 
-const DEFAULT_MODEL = "gemini-3-flash-preview";
 /** Default lesson timeout — Gemini lessons commonly take 30–45s. */
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-function resolveTimeoutMs(): number {
+function resolveLessonTimeoutMs(): number {
   // Lesson timeout is independent of intent parsing (do not fall back to AI_INTENT_PARSE_TIMEOUT_MS).
-  const raw = process.env.AI_LESSON_GENERATE_TIMEOUT_MS;
-  const parsed = raw ? Number(raw) : DEFAULT_TIMEOUT_MS;
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_TIMEOUT_MS;
-  }
-
-  return parsed;
+  return resolveTimeoutMs("AI_LESSON_GENERATE_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
 }
 
 function resolveModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  return getGeminiModel();
 }
 
 export function buildSystemPrompt(): string {
@@ -236,15 +237,45 @@ export type GeminiLessonFailureReason =
   | "structure-validation"
   | "request-error";
 
+export interface LessonKgAcceptMeta {
+  knowledgeGraphId: string;
+  canonicalTopicId: string;
+  coveredConceptIds: string[];
+}
+
 export interface GeminiLessonSuccess {
   ok: true;
   data: AiLessonResponse;
+  /** Winning AI provider after optional Grok failover. */
+  provider: AiProviderName;
+  model: string;
+  failoverReason?: FailoverReason;
+  kg?: LessonKgAcceptMeta;
 }
 
 export interface GeminiLessonFailure {
   ok: false;
   reason: GeminiLessonFailureReason;
   message: string;
+  failoverReason?: FailoverReason;
+}
+
+function toLegacyLessonFailureReason(reason: FailoverReason): GeminiLessonFailureReason {
+  switch (reason) {
+    case "malformed_json":
+      return "invalid-json";
+    case "validation":
+      return "schema-validation";
+    case "structure_validation":
+      return "structure-validation";
+    case "missing_api_key":
+      return "missing-api-key";
+    case "timeout":
+    case "quota":
+    case "api_error":
+    default:
+      return "request-error";
+  }
 }
 
 function logGeminiLessonError(
@@ -499,113 +530,197 @@ function summarizeRawLessonForDev(raw: unknown): Record<string, unknown> {
   };
 }
 
-export async function generateLessonWithGemini(
-  input: GenerateLessonInput,
-): Promise<GeminiLessonSuccess | GeminiLessonFailure> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+export interface FinalizedLessonPayload {
+  lesson: AiLessonResponse;
+  kg?: LessonKgAcceptMeta;
+}
 
-  if (!apiKey) {
+function finalizeLessonFromProviderText(
+  content: string,
+  provider: AiProviderName,
+  input: GenerateLessonInput,
+  timeoutMs: number,
+):
+  | { ok: true; data: FinalizedLessonPayload }
+  | { ok: false; reason: FailoverReason; message: string } {
+  let raw: unknown;
+
+  try {
+    raw = JSON.parse(content);
+  } catch (error) {
+    logGeminiLessonError("invalid-json", error, input.goalId, input.topicId);
     return {
       ok: false,
-      reason: "missing-api-key",
-      message: "Gemini API key is not configured.",
+      reason: classifyPipelineFailure("invalid-json"),
+      message: error instanceof Error ? error.message : `Invalid JSON from ${provider}.`,
     };
   }
 
-  const client = new GoogleGenAI({ apiKey });
-  const timeoutMs = resolveTimeoutMs();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  if (process.env.NODE_ENV === "development") {
+    console.info("[generate-lesson:provider:raw-dev]", {
+      provider,
+      goalId: input.goalId,
+      topicId: input.topicId,
+      timeoutMs,
+      rawSummary: summarizeRawLessonForDev(raw),
+    });
+  }
 
-  try {
-    const response = await client.models.generateContent({
-      model: resolveModel(),
-      contents: buildUserPrompt(input),
-      config: {
-        systemInstruction: buildSystemPrompt(),
-        responseMimeType: "application/json",
-        abortSignal: controller.signal,
-      },
+  const normalized = normalizeGeminiLessonPayload(raw);
+  const validated = aiLessonResponseSchema.safeParse(normalized);
+
+  if (!validated.success) {
+    const message = validated.error.issues[0]?.message ?? `${provider} lesson failed Zod validation.`;
+    const issues = validated.error.issues.slice(0, 25).map((issue) => ({
+      path: issue.path.join("."),
+      code: issue.code,
+      message: issue.message,
+    }));
+    logGeminiLessonError("schema-validation", new Error(message), input.goalId, input.topicId, {
+      provider,
+      issueCount: validated.error.issues.length,
+      issues,
+      rawSummary: summarizeRawLessonForDev(raw),
+    });
+    return {
+      ok: false,
+      reason: classifyPipelineFailure("schema-validation"),
+      message,
+    };
+  }
+
+  const resolved = resolveKnowledgeGraph(input.goalTitle, input.goalCategory, [
+    input.goalSlug,
+    input.goalId,
+  ]);
+
+  let kgMeta: LessonKgAcceptMeta | undefined;
+
+  // Apply KG gates only when the lesson topic maps into the resolved graph.
+  // Unmapped topics (e.g. legacy AWS seed ids) keep the AI + Zod/practical path.
+  if (resolved.status === "resolved" && resolved.graph) {
+    const kgValidation = validateLessonAgainstKg({
+      goalTitle: input.goalTitle,
+      goalCategory: input.goalCategory,
+      topicTitle: input.topicTitle,
+      lesson: validated.data,
+      graph: resolved.graph,
+      aliases: [input.goalSlug, input.goalId, resolved.graph.id],
     });
 
-    const content = response.text;
+    const topicUnmapped = kgValidation.reasons.some((reason) =>
+      reason.startsWith("Unable to map lesson topic"),
+    );
 
-    if (!content) {
-      const message = "Gemini returned empty lesson content.";
-      logGeminiLessonError("empty-response", new Error(message), input.goalId, input.topicId);
-      return { ok: false, reason: "empty-response", message };
-    }
+    logKgPipelineDev({
+      flow: "lesson",
+      providersTried: [provider],
+      providerAccepted: kgValidation.ok ? provider : null,
+      knowledgeGraphId: kgValidation.knowledgeGraphId,
+      kgConfidence: resolved.confidence,
+      canonicalTopicId: kgValidation.canonicalTopicId,
+      conceptsCovered: kgValidation.coveredConceptIds,
+      reasons: kgValidation.reasons,
+      goalId: input.goalId,
+      topicId: input.topicId,
+    });
 
-    let raw: unknown;
-
-    try {
-      raw = JSON.parse(content);
-    } catch (error) {
-      logGeminiLessonError("invalid-json", error, input.goalId, input.topicId);
+    if (!kgValidation.ok && !topicUnmapped) {
+      const message =
+        kgValidation.reasons[0] ?? `${provider} lesson failed Knowledge Graph validation.`;
+      logGeminiLessonError("structure-validation", new Error(message), input.goalId, input.topicId, {
+        provider,
+        kgReasons: kgValidation.reasons,
+      });
       return {
         ok: false,
-        reason: "invalid-json",
-        message: error instanceof Error ? error.message : "Invalid JSON from Gemini.",
+        reason: classifyPipelineFailure("structure-validation"),
+        message,
       };
     }
 
-    if (process.env.NODE_ENV === "development") {
-      console.info("[generate-lesson:gemini:raw-dev]", {
-        goalId: input.goalId,
-        topicId: input.topicId,
-        model: resolveModel(),
-        timeoutMs,
-        rawSummary: summarizeRawLessonForDev(raw),
-      });
+    if (kgValidation.ok && kgValidation.knowledgeGraphId && kgValidation.canonicalTopicId) {
+      kgMeta = {
+        knowledgeGraphId: kgValidation.knowledgeGraphId,
+        canonicalTopicId: kgValidation.canonicalTopicId,
+        coveredConceptIds: kgValidation.coveredConceptIds,
+      };
     }
+  }
 
-    const normalized = normalizeGeminiLessonPayload(raw);
-    const validated = aiLessonResponseSchema.safeParse(normalized);
+  const structureError = validateAiLessonStructure(validated.data, {
+    goalSlug: input.goalSlug,
+    goalCategory: input.goalCategory,
+    topicId: input.topicId,
+    topicTitle: input.topicTitle,
+    learningObjectives: input.learningObjectives,
+  });
 
-    if (!validated.success) {
-      const message = validated.error.issues[0]?.message ?? "Gemini lesson failed Zod validation.";
-      const issues = validated.error.issues.slice(0, 25).map((issue) => ({
-        path: issue.path.join("."),
-        code: issue.code,
-        message: issue.message,
-      }));
-      logGeminiLessonError("schema-validation", new Error(message), input.goalId, input.topicId, {
-        issueCount: validated.error.issues.length,
-        issues,
-        rawSummary: summarizeRawLessonForDev(raw),
-      });
-      return { ok: false, reason: "schema-validation", message };
-    }
-
-    const structureError = validateAiLessonStructure(validated.data, {
-      goalSlug: input.goalSlug,
-      goalCategory: input.goalCategory,
-      topicId: input.topicId,
-      topicTitle: input.topicTitle,
-      learningObjectives: input.learningObjectives,
-    });
-
-    if (structureError) {
-      logGeminiLessonError(
-        "structure-validation",
-        new Error(structureError),
-        input.goalId,
-        input.topicId,
-      );
-      return { ok: false, reason: "structure-validation", message: structureError };
-    }
-
-    return { ok: true, data: validated.data };
-  } catch (error) {
-    logGeminiLessonError("request-error", error, input.goalId, input.topicId);
+  if (structureError) {
+    logGeminiLessonError(
+      "structure-validation",
+      new Error(structureError),
+      input.goalId,
+      input.topicId,
+      { provider },
+    );
     return {
       ok: false,
-      reason: "request-error",
-      message: error instanceof Error ? error.message : "Gemini lesson request failed.",
+      reason: classifyPipelineFailure("structure-validation"),
+      message: structureError,
     };
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  return { ok: true, data: { lesson: validated.data, kg: kgMeta } };
+}
+
+/**
+ * Generate a lesson via primary (Gemini) then secondary (Grok) failover.
+ * Shared normalize → Zod → structure validation runs for whichever provider returns text.
+ */
+export async function generateLessonWithGemini(
+  input: GenerateLessonInput,
+): Promise<GeminiLessonSuccess | GeminiLessonFailure> {
+  const timeoutMs = resolveLessonTimeoutMs();
+
+  const outcome = await runWithProviderFailover({
+    request: {
+      systemInstruction: buildSystemPrompt(),
+      userContent: buildUserPrompt(input),
+      timeoutMs,
+      context: {
+        flow: "lesson",
+        goalId: input.goalId,
+        topicId: input.topicId,
+      },
+    },
+    finalize: (text, provider) =>
+      finalizeLessonFromProviderText(text, provider, input, timeoutMs),
+  });
+
+  if (outcome.ok) {
+    return {
+      ok: true,
+      data: outcome.data.lesson,
+      provider: outcome.provider,
+      model: outcome.model,
+      failoverReason: outcome.failoverFrom?.reason,
+      kg: outcome.data.kg,
+    };
+  }
+
+  const legacyReason = toLegacyLessonFailureReason(outcome.reason);
+  logGeminiLessonError(legacyReason, new Error(outcome.message), input.goalId, input.topicId, {
+    failoverReason: outcome.reason,
+    attempts: outcome.attempts,
+  });
+
+  return {
+    ok: false,
+    reason: legacyReason,
+    message: outcome.message,
+    failoverReason: outcome.reason,
+  };
 }
 
 export function getLessonGeminiModel(): string {

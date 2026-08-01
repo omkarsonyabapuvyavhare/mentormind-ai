@@ -1,16 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGenerateLessonWithGemini = vi.hoisted(() => vi.fn());
-const mockIsGeminiConfigured = vi.hoisted(() => vi.fn());
+const mockIsAnyAiProviderConfigured = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/ai/generate-lesson", () => ({
   generateLessonWithGemini: mockGenerateLessonWithGemini,
   getLessonGeminiModel: () => "mock-gemini",
 }));
 
-vi.mock("@/lib/onboarding/parse-intent-ai", () => ({
-  isGeminiConfigured: mockIsGeminiConfigured,
-}));
+vi.mock("@/lib/ai/providers", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ai/providers")>("@/lib/ai/providers");
+  return {
+    ...actual,
+    isAnyAiProviderConfigured: mockIsAnyAiProviderConfigured,
+    logAiProviderSuccess: vi.fn(),
+  };
+});
 
 import { generateLessonForLearner } from "@/lib/ai/lesson-service";
 import { createDeterministicLessonForLearner } from "@/lib/ai/lesson-fallback";
@@ -41,7 +46,7 @@ const input = {
 describe("lesson source observability paths", () => {
   beforeEach(() => {
     mockGenerateLessonWithGemini.mockReset();
-    mockIsGeminiConfigured.mockReset();
+    mockIsAnyAiProviderConfigured.mockReset();
     resetServerLessonFallbackPath();
   });
 
@@ -49,10 +54,12 @@ describe("lesson source observability paths", () => {
     resetServerLessonFallbackPath();
   });
 
-  it("Gemini success → source ai / generationPath ai", async () => {
-    mockIsGeminiConfigured.mockReturnValue(true);
+  it("Gemini success → source ai / generationPath gemini", async () => {
+    mockIsAnyAiProviderConfigured.mockReturnValue(true);
     mockGenerateLessonWithGemini.mockResolvedValue({
       ok: true,
+      provider: "gemini",
+      model: "mock-gemini",
       data: buildMentorLessonFixture("Python for Data Science", {
         topicId: "python-for-data-science",
       }),
@@ -61,13 +68,31 @@ describe("lesson source observability paths", () => {
     const result = await generateLessonForLearner(input);
 
     expect(result.source).toBe("ai");
-    expect(result.generationPath).toBe("ai");
+    expect(result.generationPath).toBe("gemini");
     expect(result.fallbackReason).toBeUndefined();
     expect(mockGenerateLessonWithGemini).toHaveBeenCalledTimes(1);
   });
 
+  it("Grok failover success → generationPath grok", async () => {
+    mockIsAnyAiProviderConfigured.mockReturnValue(true);
+    mockGenerateLessonWithGemini.mockResolvedValue({
+      ok: true,
+      provider: "grok",
+      model: "grok-mock",
+      failoverReason: "quota",
+      data: buildMentorLessonFixture("Python for Data Science", {
+        topicId: "python-for-data-science",
+      }),
+    });
+
+    const result = await generateLessonForLearner(input);
+
+    expect(result.source).toBe("ai");
+    expect(result.generationPath).toBe("grok");
+  });
+
   it("Gemini invalid response → deterministic fallback with reason", async () => {
-    mockIsGeminiConfigured.mockReturnValue(true);
+    mockIsAnyAiProviderConfigured.mockReturnValue(true);
     mockGenerateLessonWithGemini.mockResolvedValue({
       ok: false,
       reason: "schema-validation",
@@ -77,12 +102,13 @@ describe("lesson source observability paths", () => {
 
     expect(result.source).toBe("deterministic");
     expect(result.fallbackReason).toBe("schema-validation");
-    expect(["deterministic", "emergency"]).toContain(result.generationPath);
+    // Data Science resolves to a KG, so Phase 3 prefers generationPath "kg".
+    expect(["deterministic", "emergency", "kg"]).toContain(result.generationPath);
     expect(mockGenerateLessonWithGemini).toHaveBeenCalledTimes(1);
   });
 
   it("Gemini timeout/request-error → deterministic fallback", async () => {
-    mockIsGeminiConfigured.mockReturnValue(true);
+    mockIsAnyAiProviderConfigured.mockReturnValue(true);
     mockGenerateLessonWithGemini.mockResolvedValue({
       ok: false,
       reason: "request-error",
@@ -95,8 +121,8 @@ describe("lesson source observability paths", () => {
     expect(result.generationPath).toBeDefined();
   });
 
-  it("missing API key skips Gemini entirely", async () => {
-    mockIsGeminiConfigured.mockReturnValue(false);
+  it("missing API key skips AI providers entirely", async () => {
+    mockIsAnyAiProviderConfigured.mockReturnValue(false);
 
     const result = await generateLessonForLearner(input);
 

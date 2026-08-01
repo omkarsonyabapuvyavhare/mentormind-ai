@@ -29,7 +29,9 @@ export const generateLessonResponseSchema = z.object({
   }),
   fallbackReason: fallbackReasonSchema,
   /** Optional development-only provenance; ignored by lesson rendering logic. */
-  generationPath: z.enum(["ai", "deterministic", "emergency"]).optional(),
+  generationPath: z
+    .enum(["ai", "gemini", "grok", "deterministic", "emergency"])
+    .optional(),
 });
 
 export type GenerateLessonRequest = z.infer<typeof generateLessonRequestSchema>;

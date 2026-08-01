@@ -55,9 +55,7 @@ describe("architecture separation audit", () => {
   it("limits direct Gemini generateContent calls to content modules", () => {
     const sourceFiles = collectSourceFiles(SRC_ROOT);
     const allowed = new Set([
-      join(SRC_ROOT, "lib", "onboarding", "parse-intent-ai.ts"),
-      join(SRC_ROOT, "lib", "ai", "generate-roadmap.ts"),
-      join(SRC_ROOT, "lib", "ai", "generate-lesson.ts"),
+      join(SRC_ROOT, "lib", "ai", "providers", "gemini-provider.ts"),
     ]);
 
     const violations = sourceFiles.filter((file) => {

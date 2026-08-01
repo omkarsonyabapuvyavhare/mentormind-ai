@@ -1,33 +1,43 @@
 import "server-only";
 
-import { GoogleGenAI } from "@google/genai";
-
+import {
+  classifyPipelineFailure,
+  getGeminiModel,
+  isGeminiConfigured,
+  resolveTimeoutMs,
+  runWithProviderFailover,
+  type AiProviderName,
+  type FailoverReason,
+  type ProviderAttemptFailure,
+} from "@/lib/ai/providers";
 import {
   aiRoadmapResponseSchema,
   validateAiRoadmapStructure,
   type AiRoadmapResponse,
 } from "@/lib/ai/roadmap-schema";
 import type { OnboardingInput } from "@/lib/onboarding/schema";
-import { isGeminiConfigured } from "@/lib/onboarding/parse-intent-ai";
+import { resolveKnowledgeGraph } from "@/knowledge-base/registry";
+import {
+  validateRoadmapAgainstKg,
+  type NormalizedKgRoadmapTopic,
+} from "@/knowledge-base/validation";
+import { isAwsCertificationGoal } from "@/lib/goals/goal-identity";
+import { logKgPipelineDev } from "@/lib/knowledge-graph";
 
 import type { RoadmapGenerationContext } from "@/lib/ai/roadmap-fallback";
 
-const DEFAULT_MODEL = "gemini-3-flash-preview";
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-function resolveTimeoutMs(): number {
-  const raw = process.env.AI_ROADMAP_GENERATE_TIMEOUT_MS ?? process.env.AI_INTENT_PARSE_TIMEOUT_MS;
-  const parsed = raw ? Number(raw) : DEFAULT_TIMEOUT_MS;
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_TIMEOUT_MS;
-  }
-
-  return parsed;
+function resolveRoadmapTimeoutMs(): number {
+  return resolveTimeoutMs(
+    "AI_ROADMAP_GENERATE_TIMEOUT_MS",
+    DEFAULT_TIMEOUT_MS,
+    "AI_INTENT_PARSE_TIMEOUT_MS",
+  );
 }
 
 function resolveModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  return getGeminiModel();
 }
 
 function buildSystemPrompt(milestoneCount: number): string {
@@ -119,21 +129,58 @@ export type GeminiRoadmapFailureReason =
   | "structure-validation"
   | "request-error";
 
+export interface RoadmapKgAcceptMeta {
+  knowledgeGraphId: string;
+  normalizedTopics: NormalizedKgRoadmapTopic[];
+  confidence: number;
+}
+
+export interface FinalizedRoadmapPayload {
+  response: AiRoadmapResponse;
+  kg?: RoadmapKgAcceptMeta;
+}
+
 export interface GeminiRoadmapResult {
   ok: true;
   data: AiRoadmapResponse;
+  provider: AiProviderName;
+  model: string;
+  failoverReason?: FailoverReason;
+  kg?: RoadmapKgAcceptMeta;
+  attempts?: ProviderAttemptFailure[];
 }
 
 export interface GeminiRoadmapFailure {
   ok: false;
   reason: GeminiRoadmapFailureReason;
   message: string;
+  failoverReason?: FailoverReason;
+  attempts?: ProviderAttemptFailure[];
+}
+
+function toLegacyRoadmapFailureReason(reason: FailoverReason): GeminiRoadmapFailureReason {
+  switch (reason) {
+    case "malformed_json":
+      return "invalid-json";
+    case "validation":
+      return "schema-validation";
+    case "structure_validation":
+      return "structure-validation";
+    case "missing_api_key":
+      return "missing-api-key";
+    case "timeout":
+    case "quota":
+    case "api_error":
+    default:
+      return "request-error";
+  }
 }
 
 function logGeminiRoadmapError(
   phase: GeminiRoadmapFailureReason,
   error: unknown,
   goalId: string,
+  extras?: Record<string, unknown>,
 ): void {
   if (process.env.NODE_ENV !== "development") {
     return;
@@ -144,10 +191,11 @@ function logGeminiRoadmapError(
     model: resolveModel(),
     goalId,
     geminiConfigured: isGeminiConfigured(),
+    ...extras,
   };
 
   if (error instanceof Error) {
-    console.warn("[generate-roadmap:gemini:dev]", {
+    console.warn("[generate-roadmap:provider:dev]", {
       ...base,
       errorName: error.name,
       errorMessage: error.message,
@@ -155,94 +203,182 @@ function logGeminiRoadmapError(
     return;
   }
 
-  console.warn("[generate-roadmap:gemini:dev]", {
+  console.warn("[generate-roadmap:provider:dev]", {
     ...base,
     errorName: "UnknownError",
     errorMessage: String(error),
   });
 }
 
+function finalizeRoadmapFromProviderText(
+  content: string,
+  provider: AiProviderName,
+  input: OnboardingInput,
+):
+  | { ok: true; data: FinalizedRoadmapPayload }
+  | { ok: false; reason: FailoverReason; message: string } {
+  let raw: unknown;
+
+  try {
+    raw = JSON.parse(content);
+  } catch (error) {
+    logGeminiRoadmapError("invalid-json", error, input.goalId, { provider });
+    return {
+      ok: false,
+      reason: classifyPipelineFailure("invalid-json"),
+      message: error instanceof Error ? error.message : `Invalid JSON from ${provider}.`,
+    };
+  }
+
+  const validated = aiRoadmapResponseSchema.safeParse(raw);
+
+  if (!validated.success) {
+    const message =
+      validated.error.issues[0]?.message ?? `${provider} roadmap failed Zod validation.`;
+    logGeminiRoadmapError("schema-validation", new Error(message), input.goalId, { provider });
+    return {
+      ok: false,
+      reason: classifyPipelineFailure("schema-validation"),
+      message,
+    };
+  }
+
+  const structureError = validateAiRoadmapStructure(validated.data, input.durationWeeks, {
+    goalSlug: input.goalSlug,
+    goalCategory: input.goalCategory,
+  });
+
+  if (structureError) {
+    logGeminiRoadmapError("structure-validation", new Error(structureError), input.goalId, {
+      provider,
+    });
+    return {
+      ok: false,
+      reason: classifyPipelineFailure("structure-validation"),
+      message: structureError,
+    };
+  }
+
+  const resolved = resolveKnowledgeGraph(input.goalTitle, input.goalCategory, [
+    input.goalSlug,
+    input.goalId,
+  ]);
+
+  // AWS SAA keeps the existing seed/AI path — do not force KG topic remapping.
+  if (isAwsCertificationGoal(input.goalSlug)) {
+    return { ok: true, data: { response: validated.data } };
+  }
+
+  // High-confidence KG goals must pass KG validation (contamination, duplicates, prereq order).
+  if (resolved.status === "resolved" && resolved.graph) {
+    const kgValidation = validateRoadmapAgainstKg({
+      goalTitle: input.goalTitle,
+      goalCategory: input.goalCategory,
+      aliases: [input.goalSlug, input.goalId, resolved.graph.id],
+      topics: validated.data.milestones.map((milestone, index) => ({
+        title: milestone.topicTitle,
+        order: index + 1,
+      })),
+      graph: resolved.graph,
+    });
+
+    logKgPipelineDev({
+      flow: "roadmap",
+      providersTried: [provider],
+      providerAccepted: kgValidation.ok ? provider : null,
+      knowledgeGraphId: kgValidation.knowledgeGraphId,
+      kgConfidence: resolved.confidence,
+      canonicalTopics: kgValidation.normalizedTopics.map((topic) => topic.canonicalTopicId),
+      reasons: kgValidation.reasons,
+      goalId: input.goalId,
+    });
+
+    if (!kgValidation.ok) {
+      const message =
+        kgValidation.reasons[0] ?? `${provider} roadmap failed Knowledge Graph validation.`;
+      logGeminiRoadmapError("structure-validation", new Error(message), input.goalId, {
+        provider,
+        kgReasons: kgValidation.reasons,
+      });
+      return {
+        ok: false,
+        reason: classifyPipelineFailure("structure-validation"),
+        message,
+      };
+    }
+
+    const remapped: AiRoadmapResponse = {
+      milestones: validated.data.milestones.map((milestone, index) => {
+        const normalized = kgValidation.normalizedTopics[index];
+        return {
+          ...milestone,
+          topicTitle: normalized?.canonicalTitle ?? milestone.topicTitle,
+        };
+      }),
+    };
+
+    return {
+      ok: true,
+      data: {
+        response: remapped,
+        kg: {
+          knowledgeGraphId: kgValidation.knowledgeGraphId!,
+          normalizedTopics: kgValidation.normalizedTopics,
+          confidence: resolved.confidence,
+        },
+      },
+    };
+  }
+
+  // Non-KG / unsupported goals: accept AI-only after Zod + structure (no random KG mapping).
+  return { ok: true, data: { response: validated.data } };
+}
+
 export async function generateRoadmapWithGemini(
   input: OnboardingInput,
   context: RoadmapGenerationContext | undefined,
 ): Promise<GeminiRoadmapResult | GeminiRoadmapFailure> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-  if (!apiKey) {
-    return {
-      ok: false,
-      reason: "missing-api-key",
-      message: "Gemini API key is not configured.",
-    };
-  }
-
   const milestoneCount = Math.min(Math.max(input.durationWeeks, 4), 8);
-  const client = new GoogleGenAI({ apiKey });
-  const timeoutMs = resolveTimeoutMs();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = resolveRoadmapTimeoutMs();
 
-  try {
-    const response = await client.models.generateContent({
-      model: resolveModel(),
-      contents: buildUserPrompt(input, context),
-      config: {
-        systemInstruction: buildSystemPrompt(milestoneCount),
-        responseMimeType: "application/json",
-        abortSignal: controller.signal,
+  const outcome = await runWithProviderFailover({
+    request: {
+      systemInstruction: buildSystemPrompt(milestoneCount),
+      userContent: buildUserPrompt(input, context),
+      timeoutMs,
+      context: {
+        flow: "roadmap",
+        goalId: input.goalId,
       },
-    });
+    },
+    finalize: (text, provider) => finalizeRoadmapFromProviderText(text, provider, input),
+  });
 
-    const content = response.text;
-
-    if (!content) {
-      const message = "Gemini returned empty roadmap content.";
-      logGeminiRoadmapError("empty-response", new Error(message), input.goalId);
-      return { ok: false, reason: "empty-response", message };
-    }
-
-    let raw: unknown;
-
-    try {
-      raw = JSON.parse(content);
-    } catch (error) {
-      logGeminiRoadmapError("invalid-json", error, input.goalId);
-      return {
-        ok: false,
-        reason: "invalid-json",
-        message: error instanceof Error ? error.message : "Invalid JSON from Gemini.",
-      };
-    }
-
-    const validated = aiRoadmapResponseSchema.safeParse(raw);
-
-    if (!validated.success) {
-      const message = validated.error.issues[0]?.message ?? "Gemini roadmap failed Zod validation.";
-      logGeminiRoadmapError("schema-validation", new Error(message), input.goalId);
-      return { ok: false, reason: "schema-validation", message };
-    }
-
-    const structureError = validateAiRoadmapStructure(validated.data, input.durationWeeks, {
-      goalSlug: input.goalSlug,
-      goalCategory: input.goalCategory,
-    });
-
-    if (structureError) {
-      logGeminiRoadmapError("structure-validation", new Error(structureError), input.goalId);
-      return { ok: false, reason: "structure-validation", message: structureError };
-    }
-
-    return { ok: true, data: validated.data };
-  } catch (error) {
-    logGeminiRoadmapError("request-error", error, input.goalId);
+  if (outcome.ok) {
     return {
-      ok: false,
-      reason: "request-error",
-      message: error instanceof Error ? error.message : "Gemini roadmap request failed.",
+      ok: true,
+      data: outcome.data.response,
+      provider: outcome.provider,
+      model: outcome.model,
+      failoverReason: outcome.failoverFrom?.reason,
+      kg: outcome.data.kg,
+      attempts: outcome.failoverFrom ? [outcome.failoverFrom] : undefined,
     };
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  const legacyReason = toLegacyRoadmapFailureReason(outcome.reason);
+  logGeminiRoadmapError(legacyReason, new Error(outcome.message), input.goalId, {
+    failoverReason: outcome.reason,
+    attempts: outcome.attempts,
+  });
+
+  return {
+    ok: false,
+    reason: legacyReason,
+    message: outcome.message,
+    failoverReason: outcome.reason,
+    attempts: outcome.attempts,
+  };
 }
 
 export function getRoadmapGeminiModel(): string {

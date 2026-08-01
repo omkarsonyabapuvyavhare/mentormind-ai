@@ -1,6 +1,7 @@
 import { demo } from "@/constants/demo";
 import { thresholds } from "@/constants/thresholds";
 import { capScore } from "@/lib/engine/helpers";
+import { isPresenterModeEnabledByEnv } from "@/lib/presenter/presenter-mode";
 import type { AppState } from "@/stores/store-types";
 import type { DecisionAction } from "@/types/decisions";
 import type { LearnerEvent } from "@/types/events";
@@ -44,7 +45,8 @@ export function isInactivityNudge(nudge: Nudge): boolean {
 }
 
 export function shouldShowResetTimeline(state: AppState): boolean {
-  if (!state.presenterMode) {
+  // Mirror inactivity shortcut gating: store flag or build-time env presenter mode.
+  if (!state.presenterMode && !isPresenterModeEnabledByEnv()) {
     return false;
   }
 

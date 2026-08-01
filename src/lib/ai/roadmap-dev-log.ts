@@ -30,7 +30,10 @@ export function logRoadmapGenerationDevVerification(payload: {
     return;
   }
 
-  console.info("[Fallback] Roadmap generated", payload);
+  console.info(
+    payload.source === "kg" ? "[KG] Roadmap generated" : "[Fallback] Roadmap generated",
+    payload,
+  );
 }
 
 export function summarizeRoadmap(roadmap: Roadmap): {

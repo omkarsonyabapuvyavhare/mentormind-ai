@@ -1,14 +1,19 @@
 import "server-only";
 
-import { GoogleGenAI } from "@google/genai";
-
+import {
+  classifyPipelineFailure,
+  getGeminiModel,
+  isGeminiConfigured,
+  resolveTimeoutMs,
+  runWithProviderFailover,
+  type AiProviderName,
+} from "@/lib/ai/providers";
 import {
   clampParsedGoalIntent,
   parsedGoalIntentSchema,
   type ParsedGoalIntent,
 } from "@/lib/onboarding/parse-intent-schema";
 
-const DEFAULT_MODEL = "gemini-3-flash-preview";
 const DEFAULT_TIMEOUT_MS = 8_000;
 
 const SYSTEM_PROMPT = `You extract structured learning goals from natural language for MentorMind AI.
@@ -35,39 +40,31 @@ Rules:
 - Recommend realistic focus areas for the stated goal and category.
 - Keep strings concise and human-readable.`;
 
-function resolveTimeoutMs(): number {
-  const raw = process.env.AI_INTENT_PARSE_TIMEOUT_MS;
-  const parsed = raw ? Number(raw) : DEFAULT_TIMEOUT_MS;
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_TIMEOUT_MS;
-  }
-
-  return parsed;
+function resolveIntentTimeoutMs(): number {
+  return resolveTimeoutMs("AI_INTENT_PARSE_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
 }
 
 function resolveModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  return getGeminiModel();
 }
 
-export function isGeminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
-}
+/** Re-export for existing callers / tests. */
+export { isGeminiConfigured } from "@/lib/ai/providers";
 
-function logGeminiProviderError(
+function logIntentProviderError(
   phase: "request" | "empty-response" | "invalid-json" | "schema-validation",
   error: unknown,
+  provider?: AiProviderName,
 ): void {
   if (process.env.NODE_ENV !== "development") {
     return;
   }
 
-  const model = resolveModel();
-  const geminiApiKeyPresent = isGeminiConfigured();
   const base = {
     phase,
-    model,
-    geminiApiKeyPresent,
+    provider: provider ?? "unknown",
+    model: resolveModel(),
+    geminiApiKeyPresent: isGeminiConfigured(),
   };
 
   if (error instanceof Error) {
@@ -75,10 +72,9 @@ function logGeminiProviderError(
       status?: number;
       statusCode?: number;
       code?: string | number;
-      cause?: unknown;
     };
 
-    console.warn("[parse-intent:gemini:dev]", {
+    console.warn("[parse-intent:provider:dev]", {
       ...base,
       errorName: enriched.name,
       errorMessage: enriched.message,
@@ -88,7 +84,7 @@ function logGeminiProviderError(
     return;
   }
 
-  console.warn("[parse-intent:gemini:dev]", {
+  console.warn("[parse-intent:provider:dev]", {
     ...base,
     errorName: "UnknownError",
     errorMessage: String(error),
@@ -96,60 +92,89 @@ function logGeminiProviderError(
   });
 }
 
-export async function parseGoalIntentWithGemini(text: string): Promise<ParsedGoalIntent | null> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-  if (!apiKey) {
-    return null;
-  }
-
-  const client = new GoogleGenAI({ apiKey });
-  const timeoutMs = resolveTimeoutMs();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+function finalizeIntentFromProviderText(
+  content: string,
+  provider: AiProviderName,
+):
+  | { ok: true; data: ParsedGoalIntent }
+  | { ok: false; reason: ReturnType<typeof classifyPipelineFailure>; message: string } {
+  let raw: unknown;
 
   try {
-    const response = await client.models.generateContent({
-      model: resolveModel(),
-      contents: text,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-        abortSignal: controller.signal,
-      },
-    });
-
-    const content = response.text;
-
-    if (!content) {
-      logGeminiProviderError("empty-response", new Error("Gemini returned empty text content."));
-      return null;
-    }
-
-    let raw: unknown;
-
-    try {
-      raw = JSON.parse(content);
-    } catch (error) {
-      logGeminiProviderError("invalid-json", error);
-      return null;
-    }
-
-    const validated = parsedGoalIntentSchema.safeParse(raw);
-
-    if (!validated.success) {
-      logGeminiProviderError(
-        "schema-validation",
-        new Error(validated.error.issues[0]?.message ?? "Gemini JSON failed Zod validation."),
-      );
-      return null;
-    }
-
-    return clampParsedGoalIntent(validated.data);
+    raw = JSON.parse(content);
   } catch (error) {
-    logGeminiProviderError("request", error);
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
+    logIntentProviderError("invalid-json", error, provider);
+    return {
+      ok: false,
+      reason: classifyPipelineFailure("invalid-json"),
+      message: error instanceof Error ? error.message : `Invalid JSON from ${provider}.`,
+    };
   }
+
+  const validated = parsedGoalIntentSchema.safeParse(raw);
+
+  if (!validated.success) {
+    const message =
+      validated.error.issues[0]?.message ?? `${provider} JSON failed Zod validation.`;
+    logIntentProviderError("schema-validation", new Error(message), provider);
+    return {
+      ok: false,
+      reason: classifyPipelineFailure("schema-validation"),
+      message,
+    };
+  }
+
+  return { ok: true, data: clampParsedGoalIntent(validated.data) };
+}
+
+export interface ParseIntentAiSuccess {
+  ok: true;
+  parsed: ParsedGoalIntent;
+  provider: AiProviderName;
+  model: string;
+}
+
+export interface ParseIntentAiFailure {
+  ok: false;
+  reason: string;
+  message: string;
+}
+
+/**
+ * Parse learner intent with Gemini → Grok failover.
+ * Returns null on total failure for backward-compatible callers.
+ */
+export async function parseGoalIntentWithGemini(text: string): Promise<ParsedGoalIntent | null> {
+  const result = await parseGoalIntentWithProviders(text);
+  return result.ok ? result.parsed : null;
+}
+
+export async function parseGoalIntentWithProviders(
+  text: string,
+): Promise<ParseIntentAiSuccess | ParseIntentAiFailure> {
+  const outcome = await runWithProviderFailover({
+    request: {
+      systemInstruction: SYSTEM_PROMPT,
+      userContent: text,
+      timeoutMs: resolveIntentTimeoutMs(),
+      context: { flow: "intent" },
+    },
+    finalize: (rawText, provider) => finalizeIntentFromProviderText(rawText, provider),
+  });
+
+  if (outcome.ok) {
+    return {
+      ok: true,
+      parsed: outcome.data,
+      provider: outcome.provider,
+      model: outcome.model,
+    };
+  }
+
+  logIntentProviderError("request", new Error(outcome.message));
+  return {
+    ok: false,
+    reason: outcome.reason,
+    message: outcome.message,
+  };
 }

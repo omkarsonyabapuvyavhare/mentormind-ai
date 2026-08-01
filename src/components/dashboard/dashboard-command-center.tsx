@@ -24,7 +24,7 @@ export function DashboardCommandCenter() {
       {partner ? <AccountabilityPartnerCard message={partner} onAction={handlePartnerAction} /> : null}
       <MentorMissionCard />
       <LearnerEngagementPanel />
-      <PresenterControls variant="dashboard" />
+      <PresenterControls variant="dashboard" shortcutsOnly />
     </div>
   );
 }

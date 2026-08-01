@@ -15,6 +15,15 @@ import {
   type TopicAssessment,
 } from "@/lib/assessment/assessment-schema";
 import { buildDeterministicAssessmentQuestions } from "@/lib/assessment/assessment-fallback";
+import { buildKgAssessment } from "@/knowledge-base/generation";
+import { resolveKnowledgeGraph } from "@/knowledge-base/registry";
+import { KG_VALIDATION_VERSION } from "@/knowledge-base/schema";
+import { validateAssessmentAgainstKg } from "@/knowledge-base/validation";
+import {
+  buildTopicAssessmentFromKgQuestions,
+  logKgPipelineDev,
+  mapKgQuestionToAssessmentQuestion,
+} from "@/lib/knowledge-graph";
 
 const PASSING_SCORE = 70;
 
@@ -145,10 +154,168 @@ function supplementQuestions(
   return [...existing, ...fallbackQuestions];
 }
 
-export function buildAssessmentFromLesson(
+function tryBuildKgAssessment(
   lesson: GeneratedLessonPayload,
   context: AssessmentValidationContext,
+  goalTitle: string,
+): TopicAssessment | null {
+  const kgBuilt = buildKgAssessment({
+    topicId: lesson.canonicalTopicId ?? lesson.topicId,
+    knowledgeGraphId: lesson.knowledgeGraphId,
+    goalTitle,
+    goalCategory: context.goalCategory,
+    aliases: [context.goalSlug, lesson.knowledgeGraphId ?? ""].filter(Boolean),
+  });
+
+  if (!kgBuilt.ok) {
+    return null;
+  }
+
+  const validation = validateAssessmentAgainstKg({
+    goalTitle,
+    goalCategory: context.goalCategory,
+    topicTitle: lesson.title,
+    questions: kgBuilt.questions,
+    aliases: [context.goalSlug, kgBuilt.knowledgeGraphId],
+  });
+
+  logKgPipelineDev({
+    flow: "assessment",
+    finalSource: validation.ok ? "kg" : null,
+    knowledgeGraphId: validation.knowledgeGraphId,
+    canonicalTopicId: validation.canonicalTopicId,
+    uniqueConceptCount: validation.uniqueConceptIds.length,
+    questionTypes: validation.questionTypes,
+    diversityOk: validation.ok,
+    reasons: validation.reasons,
+    goalId: context.goalSlug,
+    topicId: lesson.topicId,
+  });
+
+  if (!validation.ok) {
+    return null;
+  }
+
+  return buildTopicAssessmentFromKgQuestions(
+    lesson.topicId,
+    kgBuilt.questions,
+    kgBuilt.knowledgeGraphId,
+    kgBuilt.canonicalTopicId,
+    "fallback",
+  );
+}
+
+function attachKgMetaIfPresent(
+  assessment: TopicAssessment,
+  lesson: GeneratedLessonPayload,
 ): TopicAssessment {
+  if (!lesson.knowledgeGraphId && !lesson.canonicalTopicId) {
+    return assessment;
+  }
+
+  return topicAssessmentSchema.parse({
+    ...assessment,
+    knowledgeGraphId: lesson.knowledgeGraphId ?? assessment.knowledgeGraphId,
+    canonicalTopicId: lesson.canonicalTopicId ?? assessment.canonicalTopicId,
+    kgValidationVersion: KG_VALIDATION_VERSION,
+  });
+}
+
+export function buildAssessmentFromLesson(
+  lesson: GeneratedLessonPayload,
+  context: AssessmentValidationContext & { goalTitle?: string },
+): TopicAssessment {
+  const goalTitle = context.goalTitle ?? context.goalSlug;
+  const resolved = resolveKnowledgeGraph(goalTitle, context.goalCategory, [
+    context.goalSlug,
+    lesson.knowledgeGraphId ?? "",
+  ]);
+  const kgResolved = resolved.status === "resolved" && Boolean(resolved.graph);
+
+  // Preferred: validated lesson KCs when they already carry KG concept ids.
+  if (kgResolved) {
+    const lessonKgQuestions = extractLessonQuestions(lesson)
+      .map((question, index) => {
+        if (!question.conceptId) {
+          // Promote conceptTag → conceptId when it matches a KG concept id shape.
+          return {
+            id: question.id,
+            question: question.prompt,
+            options: question.options,
+            correctIndex: question.correctIndex as 0 | 1 | 2 | 3,
+            explanation: question.explanation,
+            conceptId: question.conceptTag,
+            difficulty: question.difficulty ?? ("beginner" as const),
+            questionType: question.questionType ?? ("concept-understanding" as const),
+            sourceTopicId: lesson.canonicalTopicId ?? lesson.topicId,
+            prerequisiteIds: question.prerequisiteIds ?? [],
+          };
+        }
+        return {
+          id: question.id,
+          question: question.prompt,
+          options: question.options,
+          correctIndex: question.correctIndex as 0 | 1 | 2 | 3,
+          explanation: question.explanation,
+          conceptId: question.conceptId,
+          difficulty: question.difficulty ?? ("beginner" as const),
+          questionType: question.questionType ?? ("concept-understanding" as const),
+          sourceTopicId: question.sourceTopicId ?? lesson.canonicalTopicId ?? lesson.topicId,
+          prerequisiteIds: question.prerequisiteIds ?? [],
+        };
+      });
+
+    if (lessonKgQuestions.length === TARGET_ASSESSMENT_QUESTIONS) {
+      const validation = validateAssessmentAgainstKg({
+        goalTitle,
+        goalCategory: context.goalCategory,
+        topicTitle: lesson.title,
+        questions: lessonKgQuestions,
+        graph: resolved.graph,
+        aliases: [context.goalSlug],
+      });
+
+      if (validation.ok) {
+        const mapped = lessonKgQuestions
+          .map((question, index) =>
+            mapKgQuestionToAssessmentQuestion(question, lesson.topicId, index),
+          )
+          .filter((question): question is AssessmentQuestion => Boolean(question));
+
+        if (mapped.length === TARGET_ASSESSMENT_QUESTIONS) {
+          const fromLesson = topicAssessmentSchema.parse({
+            topicId: lesson.topicId,
+            passingScore: PASSING_SCORE,
+            questions: mapped,
+            source: "lesson",
+            knowledgeGraphId: validation.knowledgeGraphId ?? undefined,
+            canonicalTopicId: validation.canonicalTopicId ?? undefined,
+            kgValidationVersion: KG_VALIDATION_VERSION,
+          });
+
+          logKgPipelineDev({
+            flow: "assessment",
+            finalSource: "lesson+kg",
+            knowledgeGraphId: validation.knowledgeGraphId,
+            canonicalTopicId: validation.canonicalTopicId,
+            uniqueConceptCount: validation.uniqueConceptIds.length,
+            questionTypes: validation.questionTypes,
+            diversityOk: true,
+            goalId: context.goalSlug,
+            topicId: lesson.topicId,
+          });
+
+          return fromLesson;
+        }
+      }
+    }
+
+    const kgAssessment = tryBuildKgAssessment(lesson, context, goalTitle);
+    if (kgAssessment) {
+      return kgAssessment;
+    }
+  }
+
   const extracted = filterValidLessonQuestions(extractLessonQuestions(lesson));
 
   // Blend lesson knowledge checks with artifact/exercise/core seeds so the five
@@ -187,7 +354,13 @@ export function buildAssessmentFromLesson(
       questions = supplementQuestions(lesson, context, questions);
       source = extracted.length > 0 ? "hybrid" : "fallback";
     } catch {
-      return buildFallbackAssessment(lesson, context);
+      if (kgResolved) {
+        const kgAssessment = tryBuildKgAssessment(lesson, context, goalTitle);
+        if (kgAssessment) {
+          return kgAssessment;
+        }
+      }
+      return attachKgMetaIfPresent(buildFallbackAssessment(lesson, context), lesson);
     }
   }
 
@@ -204,7 +377,14 @@ export function buildAssessmentFromLesson(
   const qualityError = validateAssessmentQuestionQuality(assessment.questions);
 
   if (!structureError && !qualityError) {
-    return assessment;
+    return attachKgMetaIfPresent(assessment, lesson);
+  }
+
+  if (kgResolved) {
+    const kgAssessment = tryBuildKgAssessment(lesson, context, goalTitle);
+    if (kgAssessment) {
+      return kgAssessment;
+    }
   }
 
   // Regenerate once from deterministic technical fallback.
@@ -221,5 +401,5 @@ export function buildAssessmentFromLesson(
     );
   }
 
-  return assessment;
+  return attachKgMetaIfPresent(assessment, lesson);
 }

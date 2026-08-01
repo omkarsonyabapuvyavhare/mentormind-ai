@@ -9,7 +9,7 @@ import {
 } from "@/lib/learn/lesson-session-cache";
 import { buildMentorLessonFixture } from "../helpers/mentor-lesson-fixture";
 
-describe("lesson cache stale rejection (v4)", () => {
+describe("lesson cache stale rejection (v5)", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
     process.env.NODE_ENV = "development";
@@ -19,8 +19,8 @@ describe("lesson cache stale rejection (v4)", () => {
     window.sessionStorage.clear();
   });
 
-  it("uses cache version v4", () => {
-    expect(LESSON_CACHE_VERSION).toBe("v4");
+  it("uses cache version v5", () => {
+    expect(LESSON_CACHE_VERSION).toBe("v5");
   });
 
   it("rejects objective-driven Data Engineering cache payloads", () => {

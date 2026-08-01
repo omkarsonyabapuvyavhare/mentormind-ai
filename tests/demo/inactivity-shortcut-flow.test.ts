@@ -43,7 +43,8 @@ describe("inactivity shortcut after full weak-performance flow", () => {
 
     const afterEntry = diagnose(store.getState());
     expect(afterEntry.presenterMode).toBe(true);
-    expect(afterEntry.shouldShow).toBe(false);
+    // Presenter mode shows the Fast Forward Timeline card beside engagement immediately.
+    expect(afterEntry.shouldShow).toBe(true);
 
     const questionCount = awsSaaQuizzes["vpc-networking"].questions.length;
     store.getState().dispatchLearnerEvent({

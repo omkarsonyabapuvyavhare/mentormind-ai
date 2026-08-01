@@ -29,7 +29,7 @@ export type AiRoadmapTask = z.infer<typeof aiRoadmapTaskSchema>;
 export type AiRoadmapMilestone = z.infer<typeof aiRoadmapMilestoneSchema>;
 export type AiRoadmapResponse = z.infer<typeof aiRoadmapResponseSchema>;
 
-export const roadmapGenerationSourceSchema = z.enum(["ai", "deterministic"]);
+export const roadmapGenerationSourceSchema = z.enum(["ai", "deterministic", "kg"]);
 
 export type RoadmapGenerationSource = z.infer<typeof roadmapGenerationSourceSchema>;
 

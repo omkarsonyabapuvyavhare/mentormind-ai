@@ -1,8 +1,12 @@
 import {
+  isAnyAiProviderConfigured,
+  logAiProviderSuccess,
+} from "@/lib/ai/providers";
+import {
   buildDefaultParsedIntent,
   parseGoalIntentDeterministic,
 } from "@/lib/onboarding/parse-intent-deterministic";
-import { isGeminiConfigured, parseGoalIntentWithGemini } from "@/lib/onboarding/parse-intent-ai";
+import { parseGoalIntentWithProviders } from "@/lib/onboarding/parse-intent-ai";
 import {
   clampParsedGoalIntent,
   parsedGoalIntentSchema,
@@ -20,23 +24,34 @@ export async function parseLearnerIntent(text: string): Promise<ParseIntentRespo
     };
   }
 
-  if (isGeminiConfigured()) {
-    const aiParsed = await parseGoalIntentWithGemini(normalized);
+  if (isAnyAiProviderConfigured()) {
+    const aiParsed = await parseGoalIntentWithProviders(normalized);
 
-    if (aiParsed) {
+    if (aiParsed.ok) {
+      logAiProviderSuccess({
+        flow: "intent",
+        provider: aiParsed.provider,
+        model: aiParsed.model,
+      });
+
       return {
         source: "ai",
-        parsed: clampParsedGoalIntent(parsedGoalIntentSchema.parse(aiParsed)),
+        parsed: clampParsedGoalIntent(parsedGoalIntentSchema.parse(aiParsed.parsed)),
       };
     }
 
     const deterministicParsed =
       parseGoalIntentDeterministic(normalized) ?? buildDefaultParsedIntent();
 
+    logAiProviderSuccess({
+      flow: "intent",
+      provider: "deterministic",
+    });
+
     return {
       source: "deterministic",
       parsed: clampParsedGoalIntent(parsedGoalIntentSchema.parse(deterministicParsed)),
-      fallbackReason: "validation",
+      fallbackReason: aiParsed.reason || "validation",
     };
   }
 

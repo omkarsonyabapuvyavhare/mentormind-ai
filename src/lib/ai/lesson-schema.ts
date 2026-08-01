@@ -100,6 +100,10 @@ export type LessonGenerationSource = z.infer<typeof lessonGenerationSourceSchema
 export interface GeneratedLesson extends AiLessonResponse {
   topicId: string;
   source: LessonGenerationSource;
+  /** Optional Knowledge Graph provenance (Phase 3). */
+  knowledgeGraphId?: string;
+  canonicalTopicId?: string;
+  kgValidationVersion?: string;
 }
 
 export function estimateWordCount(lesson: AiLessonResponse): number {

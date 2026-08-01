@@ -33,6 +33,13 @@ describe("shouldShowInactivityShortcut", () => {
     expect(shouldShowInactivityShortcut(store.getState())).toBe(false);
   });
 
+  it("appears in presenter mode even before a weak quiz", () => {
+    store.setState({ presenterMode: true });
+
+    expect(store.getState().presenterMode).toBe(true);
+    expect(shouldShowInactivityShortcut(store.getState())).toBe(true);
+  });
+
   it("appears after a weak quiz in presenter mode", () => {
     store.setState({ presenterMode: true });
 

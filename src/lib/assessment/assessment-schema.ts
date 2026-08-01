@@ -3,6 +3,10 @@ import { z } from "zod";
 import { validateAssessmentQuestionQuality } from "@/lib/assessment/assessment-question-quality";
 import { validateContentForGoalCategory } from "@/lib/goals/domain-validation";
 import type { GoalCategory } from "@/lib/goals/goal-identity";
+import {
+  assessmentSkillTypeSchema,
+  difficultyLevelSchema,
+} from "@/knowledge-base/schema";
 
 export const TARGET_ASSESSMENT_QUESTIONS = 5;
 export const MIN_ASSESSMENT_QUESTIONS = TARGET_ASSESSMENT_QUESTIONS;
@@ -22,6 +26,12 @@ export const assessmentQuestionSchema = z
     ]),
     correctIndex: z.number().int().min(0).max(3),
     explanation: z.string().min(1).max(400),
+    /** Optional Knowledge Graph metadata (Phase 3, backward-compatible). */
+    conceptId: z.string().min(1).max(120).optional(),
+    difficulty: difficultyLevelSchema.optional(),
+    questionType: assessmentSkillTypeSchema.optional(),
+    sourceTopicId: z.string().min(1).max(120).optional(),
+    prerequisiteIds: z.array(z.string().min(1).max(120)).max(12).optional(),
   })
   .superRefine((question, ctx) => {
     const uniqueOptions = new Set(question.options.map((option) => option.trim().toLowerCase()));
@@ -44,6 +54,9 @@ export const topicAssessmentSchema = z.object({
     .array(assessmentQuestionSchema)
     .length(TARGET_ASSESSMENT_QUESTIONS),
   source: assessmentSourceSchema,
+  knowledgeGraphId: z.string().min(1).max(120).optional(),
+  canonicalTopicId: z.string().min(1).max(120).optional(),
+  kgValidationVersion: z.string().min(1).max(64).optional(),
 });
 
 export type AssessmentQuestion = z.infer<typeof assessmentQuestionSchema>;

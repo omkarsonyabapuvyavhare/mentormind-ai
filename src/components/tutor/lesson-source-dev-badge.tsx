@@ -20,11 +20,15 @@ function resolveBadgeLabel(
   }
 
   if (lessonSource === "ai") {
-    return "Gemini";
+    return displaySourceFromOriginal(report?.originalSource ?? "gemini");
   }
 
   if (lessonSource === "cache") {
     return "Lesson Cache";
+  }
+
+  if (originalFromCache === "kg" || report?.originalSource === "kg") {
+    return "Knowledge Graph";
   }
 
   if (originalFromCache === "emergency" || report?.originalSource === "emergency") {

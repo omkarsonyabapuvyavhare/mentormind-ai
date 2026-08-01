@@ -1,6 +1,5 @@
 import { demo } from "@/constants/demo";
 import { routes } from "@/constants/routes";
-import { thresholds } from "@/constants/thresholds";
 import {
   findLastWeakQuizDecisionIndex,
   hasInactivityAfterDecisionIndex,
@@ -117,29 +116,9 @@ export function selectSecondarySessionActions(state: AppState): SessionAction[] 
 
 export { findLastWeakQuizDecisionIndex, hasInactivityAfterDecisionIndex } from "@/lib/demo/engagement-timeline-reset";
 
-function hasWeakQuizSignal(state: AppState): boolean {
-  if (findLastWeakQuizDecisionIndex(state) >= 0) {
-    return true;
-  }
-
-  const weaknesses = selectWeakTopics(state);
-  if (weaknesses.length === 0) {
-    return false;
-  }
-
-  return (
-    state.twin?.quizHistory.some((attempt) => attempt.score < thresholds.weakQuizScore) ??
-    false
-  );
-}
-
 export function shouldShowInactivityShortcut(state: AppState): boolean {
   // Prefer store flag; also honor build-time NEXT_PUBLIC_PRESENTER_MODE for Vercel bundles.
   if (!state.presenterMode && !isPresenterModeEnabledByEnv()) {
-    return false;
-  }
-
-  if (!hasWeakQuizSignal(state)) {
     return false;
   }
 
@@ -148,6 +127,8 @@ export function shouldShowInactivityShortcut(state: AppState): boolean {
     return !hasInactivityAfterDecisionIndex(state, lastWeakQuizIndex);
   }
 
+  // Presenter mode: keep the Fast Forward Timeline card beside Learner Engagement
+  // even before a weak quiz. Hide once inactivity has already been applied.
   return !state.decisions.some((decision) =>
     decision.reasons.includes("INACTIVITY_ESCALATION"),
   );

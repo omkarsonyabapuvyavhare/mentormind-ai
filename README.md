@@ -146,7 +146,9 @@ mentormind-ai/
 
 - Promote from preview or deploy from main branch.
 - Configure environment variables in Vercel project settings:
-  - `GEMINI_API_KEY` (required for live AI generation)
+  - `GEMINI_API_KEY` (primary AI provider)
+  - `XAI_API_KEY` (secondary AI provider — Grok failover when Gemini fails)
+  - `AI_PROVIDER_PRIMARY=gemini` / `AI_PROVIDER_SECONDARY=grok` (optional; these are the defaults)
   - `NEXT_PUBLIC_PRESENTER_MODE=true` (required for presenter demo controls in production)
   - Optional overrides from `.env.example` as needed
 - **Important:** `NEXT_PUBLIC_*` values are inlined into the client bundle at **build** time. If you change `NEXT_PUBLIC_PRESENTER_MODE` in Vercel, you must **redeploy / rebuild** — saving the env var alone will not update an existing deployment.
@@ -159,7 +161,7 @@ mentormind-ai/
 ## Troubleshooting
 
 - **PowerShell `npm` execution policy error**: use `npm.cmd <command>` instead of `npm <command>`.
-- **Gemini key missing**: app will continue via deterministic fallback content.
+- **AI keys missing**: app continues via deterministic fallback. With only Gemini or only Grok configured, that provider is used; with both, Gemini is tried first and Grok is the automatic failover.
 - **Presenter controls not visible**: verify `NEXT_PUBLIC_PRESENTER_MODE=true` in Vercel **and redeploy**. Open browser console — logs should show `envPresenterMode: true`. Local `.env.local` does not apply to Vercel.
 - **Port already in use**: run `npm run dev -- --port <port>`.
 - **Optional runtime verification scripts fail on Playwright path**: some scripts currently expect a Cursor-managed Playwright path under `%TEMP%/pw-temp/node_modules/playwright`; this is not required for normal app startup/build/test.
@@ -172,7 +174,7 @@ Use this sequence on a clean machine:
 2. `cd mentormind-ai`
 3. `npm install`
 4. `cp .env.example .env.local` (or PowerShell equivalent)
-5. Set `GEMINI_API_KEY` in `.env.local` (optional but recommended for live AI)
+5. Set `GEMINI_API_KEY` and optionally `XAI_API_KEY` in `.env.local` (Gemini primary, Grok secondary)
 6. `npm run dev`
 7. `npm run build`
 8. `npm test`

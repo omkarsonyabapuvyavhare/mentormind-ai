@@ -1,12 +1,16 @@
+import { resolveKnowledgeGraph } from "@/knowledge-base/registry";
+import { KG_VALIDATION_VERSION } from "@/knowledge-base/schema";
 import {
   topicAssessmentSchema,
   type TopicAssessment,
 } from "@/lib/assessment/assessment-schema";
+import type { GoalCategory } from "@/lib/goals/goal-identity";
 
-export const ASSESSMENT_CACHE_VERSION = "v4";
+export const ASSESSMENT_CACHE_VERSION = "v5";
 const CACHE_PREFIX = `mentormind-assessment-cache:${ASSESSMENT_CACHE_VERSION}:`;
-/** Versioned prefixes only — bare stem matches current v4 keys. */
+/** Versioned prefixes only — bare stem matches current v5 keys. */
 const LEGACY_VERSIONED_PREFIXES = [
+  "mentormind-assessment-cache:v4:",
   "mentormind-assessment-cache:v3:",
   "mentormind-assessment-cache:v2:",
 ] as const;
@@ -89,24 +93,64 @@ function clearIncompatibleCacheEntries(goalId: string, topicId: string): void {
   window.sessionStorage.removeItem(`${UNVERSIONED_ASSESSMENT_PREFIX}${goalId}:${topicId}`);
 }
 
-function isIncompatibleCachedAssessment(assessment: TopicAssessment, topicId: string): boolean {
+function isIncompatibleCachedAssessment(
+  assessment: TopicAssessment,
+  topicId: string,
+  options?: {
+    goalTitle?: string;
+    goalCategory?: GoalCategory;
+    goalId?: string;
+  },
+): boolean {
   if (assessment.topicId !== topicId || GENERIC_TOPIC_IDS.has(assessment.topicId)) {
     return true;
   }
 
   const haystack = assessment.questions.map((question) => question.prompt).join(" ");
-  return /explain key ideas in|which statement best reflects/i.test(haystack);
+  if (/explain key ideas in|which statement best reflects/i.test(haystack)) {
+    return true;
+  }
+
+  if (
+    options?.goalTitle &&
+    options.goalCategory &&
+    resolveKnowledgeGraph(options.goalTitle, options.goalCategory, [
+      options.goalId ?? "",
+    ]).status === "resolved"
+  ) {
+    if (!assessment.knowledgeGraphId || !assessment.canonicalTopicId) {
+      return true;
+    }
+    if (
+      assessment.kgValidationVersion &&
+      assessment.kgValidationVersion !== KG_VALIDATION_VERSION
+    ) {
+      return true;
+    }
+    const uniqueConcepts = new Set(
+      assessment.questions.map((question) => question.conceptId ?? question.conceptTag),
+    );
+    if (uniqueConcepts.size < 4) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function readCachedAssessment(
   goalId: string,
   topicId: string,
+  options?: {
+    goalTitle?: string;
+    goalCategory?: GoalCategory;
+  },
 ): TopicAssessment | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  // Drop pre-v4 / generic quiz entries so stale Foundations quizzes are never reused.
+  // Drop pre-v5 / generic quiz entries so stale Foundations quizzes are never reused.
   clearLegacyAssessmentCaches();
   clearIncompatibleCacheEntries(goalId, topicId);
 
@@ -124,7 +168,11 @@ export function readCachedAssessment(
     if (
       !validated.success ||
       validated.data.topicId !== topicId ||
-      isIncompatibleCachedAssessment(validated.data, topicId)
+      isIncompatibleCachedAssessment(validated.data, topicId, {
+        goalTitle: options?.goalTitle,
+        goalCategory: options?.goalCategory,
+        goalId,
+      })
     ) {
       window.sessionStorage.removeItem(cacheKey);
       return null;
@@ -140,6 +188,10 @@ export function readCachedAssessment(
 export function writeCachedAssessment(
   goalId: string,
   assessment: TopicAssessment,
+  options?: {
+    goalTitle?: string;
+    goalCategory?: GoalCategory;
+  },
 ): void {
   if (typeof window === "undefined") {
     return;
@@ -147,7 +199,13 @@ export function writeCachedAssessment(
 
   clearIncompatibleCacheEntries(goalId, assessment.topicId);
 
-  if (isIncompatibleCachedAssessment(assessment, assessment.topicId)) {
+  if (
+    isIncompatibleCachedAssessment(assessment, assessment.topicId, {
+      goalTitle: options?.goalTitle,
+      goalCategory: options?.goalCategory,
+      goalId,
+    })
+  ) {
     return;
   }
 

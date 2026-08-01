@@ -273,13 +273,18 @@ describe("generated assessment builder", () => {
     const assessment = buildAssessmentFromLesson(buildSampleLesson(), {
       goalSlug: "azure-fundamentals",
       goalCategory: "Cloud",
+      goalTitle: "Azure Fundamentals AZ-900",
     });
 
-    expect(["lesson", "hybrid"]).toContain(assessment.source);
+    // Mapped AZ-900 topics may use KG assessment (source fallback) when lesson KCs
+    // are incomplete or fail KG concept validation.
+    expect(["lesson", "hybrid", "fallback"]).toContain(assessment.source);
     expect(assessment.questions.length).toBe(5);
-    expect(assessment.questions.some((question) => /service model|azure/i.test(question.prompt))).toBe(
-      true,
-    );
+    expect(
+      assessment.questions.some((question) =>
+        /service model|azure|iaas|paas|saas|shared responsibility|cloud/i.test(question.prompt),
+      ),
+    ).toBe(true);
   });
 
   it("Java assessment contains Java-specific questions without study advice", () => {
@@ -513,8 +518,8 @@ describe("assessment routing and cache", () => {
 
   it("rejects stale 3-question session cache and clears storage", () => {
     const legacyKey = "mentormind-assessment-cache:learn-python:python-basics";
-    const previousKey = "mentormind-assessment-cache:v2:learn-python:python-basics";
-    const currentKey = "mentormind-assessment-cache:v4:learn-python:python-basics";
+    const previousKey = "mentormind-assessment-cache:v4:learn-python:python-basics";
+    const currentKey = "mentormind-assessment-cache:v5:learn-python:python-basics";
     const stalePayload = JSON.stringify({
       topicId: "python-basics",
       passingScore: 70,

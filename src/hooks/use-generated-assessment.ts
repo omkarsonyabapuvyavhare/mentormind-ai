@@ -35,7 +35,14 @@ export function useGeneratedAssessment(topicId: string) {
       setLoading(true);
       setError(null);
 
-      const cachedAssessment = readCachedAssessment(goalId, topicId);
+      const state = useAppStore.getState();
+      const goalTitle = state.twin?.goal.title ?? goalId;
+      const goalCategory = state.twin?.goal.category ?? "General Technology";
+
+      const cachedAssessment = readCachedAssessment(goalId, topicId, {
+        goalTitle,
+        goalCategory,
+      });
 
       if (cachedAssessment) {
         if (!cancelled) {
@@ -45,8 +52,10 @@ export function useGeneratedAssessment(topicId: string) {
         return;
       }
 
-      const state = useAppStore.getState();
-      let lesson = readCachedLesson(goalId, topicId);
+      let lesson = readCachedLesson(goalId, topicId, {
+        goalTitle,
+        goalCategory,
+      });
 
       if (!lesson) {
         const request = buildGenerateLessonRequest(state, topicId);
@@ -67,14 +76,15 @@ export function useGeneratedAssessment(topicId: string) {
       try {
         built = buildAssessmentFromLesson(lesson, {
           goalSlug: goalId,
-          goalCategory: state.twin?.goal.category ?? "General Technology",
+          goalTitle,
+          goalCategory,
         });
       } catch {
         built = buildDeterministicTopicAssessment({
           topicId,
           topicTitle: resolveTopicTitle(state, topicId),
           goalSlug: goalId,
-          goalCategory: state.twin?.goal.category ?? "General Technology",
+          goalCategory,
           learningObjectives: lesson.learningObjectives,
           sections: lesson.sections.map((section) => ({
             heading: section.heading,
@@ -88,7 +98,7 @@ export function useGeneratedAssessment(topicId: string) {
         });
       }
 
-      writeCachedAssessment(goalId, built);
+      writeCachedAssessment(goalId, built, { goalTitle, goalCategory });
 
       logAssessmentBuiltFromLesson({
         goalId,

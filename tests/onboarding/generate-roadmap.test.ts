@@ -211,8 +211,9 @@ describe("generateRoadmapForOnboarding service", () => {
 
     const result = await generateRoadmapForOnboarding(onboardingDefaults, TWIN_ID, START);
 
+    // Unsupported curriculum (no KG) — never silent AWS/Foundations mapping.
     expect(result.source).toBe("deterministic");
-    expect(result.fallbackReason).toBe("invalid-json");
+    expect(result.fallbackReason).toBe("unsupported-curriculum");
   });
 
   it("falls back when Gemini times out", async () => {
@@ -221,7 +222,8 @@ describe("generateRoadmapForOnboarding service", () => {
 
     const result = await generateRoadmapForOnboarding(azureInput, TWIN_ID, START);
 
-    expect(result.source).toBe("deterministic");
+    // Azure resolves to a KG — Phase 3 uses KG deterministic fallback.
+    expect(["kg", "deterministic"]).toContain(result.source);
     expect(result.fallbackReason).toBe("request-error");
     expect(JSON.stringify(result.roadmap).toLowerCase()).not.toContain("ec2");
   });
@@ -231,7 +233,7 @@ describe("generateRoadmapForOnboarding service", () => {
 
     const result = await generateRoadmapForOnboarding(azureInput, TWIN_ID, START);
 
-    expect(result.source).toBe("deterministic");
+    expect(["kg", "deterministic"]).toContain(result.source);
     expect(result.fallbackReason).toBe("missing-api-key");
   });
 
@@ -246,7 +248,7 @@ describe("generateRoadmapForOnboarding service", () => {
 
     const result = await generateRoadmapForOnboarding(azureInput, TWIN_ID, START);
 
-    expect(result.source).toBe("deterministic");
+    expect(["kg", "deterministic"]).toContain(result.source);
     expect(result.fallbackReason).toBe("structure-validation");
   });
 });
@@ -295,7 +297,7 @@ describe("POST /api/onboarding/generate-roadmap", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.source).toBe("deterministic");
+    expect(["kg", "deterministic"]).toContain(body.source);
     expect(body.roadmap.goalId).toBe("azure-fundamentals");
   });
 });

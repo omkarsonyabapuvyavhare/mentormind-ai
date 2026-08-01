@@ -11,6 +11,12 @@ export interface Milestone {
   status: MilestoneStatus;
   topicIds: string[];
   order: number;
+  /** Optional Knowledge Graph provenance (Phase 3). */
+  knowledgeGraphId?: string;
+  canonicalTopicId?: string;
+  prerequisiteIds?: string[];
+  relatedTopicIds?: string[];
+  kgValidationVersion?: string;
 }
 
 export interface LearningTask {
@@ -25,6 +31,12 @@ export interface LearningTask {
   injectedBy?: string;
   unlocked: boolean;
   learningObjectives?: string[];
+  /** Optional Knowledge Graph provenance (Phase 3). */
+  knowledgeGraphId?: string;
+  canonicalTopicId?: string;
+  prerequisiteIds?: string[];
+  relatedTopicIds?: string[];
+  kgValidationVersion?: string;
 }
 
 export interface Roadmap {
@@ -34,6 +46,9 @@ export interface Roadmap {
   tasks: LearningTask[];
   version: number;
   updatedAt: string;
+  /** Optional Knowledge Graph provenance (Phase 3). */
+  knowledgeGraphId?: string;
+  kgValidationVersion?: string;
 }
 
 /** Fields required when the engine injects new tasks (id assigned at apply time). */

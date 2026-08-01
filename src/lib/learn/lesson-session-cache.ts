@@ -1,21 +1,25 @@
-﻿import type { GeneratedLessonPayload } from "@/lib/learn/lesson-response-schema";
+﻿import { resolveKnowledgeGraph } from "@/knowledge-base/registry";
+import { KG_VALIDATION_VERSION } from "@/knowledge-base/schema";
+import type { GeneratedLessonPayload } from "@/lib/learn/lesson-response-schema";
 import {
   originalSourceFromLessonSource,
   reportLessonSource,
   type LessonOriginalSource,
 } from "@/lib/dev/lesson-source-observability";
+import type { GoalCategory } from "@/lib/goals/goal-identity";
 
-/** Bump when lesson shape / fallback quality changes invalidate stored sessions. */
-export const LESSON_CACHE_VERSION = "v4";
+/** Bump when lesson shape / KG metadata changes invalidate stored sessions. */
+export const LESSON_CACHE_VERSION = "v5";
 const CACHE_PREFIX = `mentormind-lesson-cache:${LESSON_CACHE_VERSION}:`;
-/** Versioned prefixes only — never the bare `mentormind-lesson-cache:` stem (it matches v4). */
+/** Versioned prefixes only — never the bare `mentormind-lesson-cache:` stem (it matches v5). */
 const LEGACY_VERSIONED_PREFIXES = [
+  "mentormind-lesson-cache:v4:",
   "mentormind-lesson-cache:v3:",
   "mentormind-lesson-cache:v2:",
 ] as const;
 const UNVERSIONED_LESSON_PREFIX = "mentormind-lesson-cache:";
 const ORIGIN_PREFIX = "mentormind-lesson-origin:v1:";
-const ORIGIN_LEGACY_CLEAR_MARKER = "mentormind-lesson-origin-cleared:v4";
+const ORIGIN_LEGACY_CLEAR_MARKER = "mentormind-lesson-origin-cleared:v5";
 
 const GENERIC_TOPIC_IDS = new Set([
   "foundations",
@@ -131,7 +135,14 @@ function readLessonOrigin(goalId: string, topicId: string): LessonOriginalSource
   }
 
   const stored = window.sessionStorage.getItem(buildOriginKey(goalId, topicId));
-  if (stored === "ai" || stored === "deterministic" || stored === "emergency") {
+  if (
+    stored === "ai" ||
+    stored === "gemini" ||
+    stored === "grok" ||
+    stored === "kg" ||
+    stored === "deterministic" ||
+    stored === "emergency"
+  ) {
     return stored;
   }
 
@@ -220,6 +231,11 @@ function lacksDataEngineeringFundamentalsConcepts(lesson: GeneratedLessonPayload
 export function isIncompatibleCachedLesson(
   lesson: GeneratedLessonPayload,
   topicId: string,
+  options?: {
+    goalTitle?: string;
+    goalCategory?: GoalCategory;
+    goalId?: string;
+  },
 ): boolean {
   if (lesson.topicId !== topicId) {
     return true;
@@ -230,7 +246,7 @@ export function isIncompatibleCachedLesson(
   }
 
   const haystack = `${lesson.title} ${lesson.learningObjectives.join(" ")}`;
-  if (/explain key ideas in/i.test(haystack)) {
+  if (/explain key ideas in|which statement best reflects/i.test(haystack)) {
     return true;
   }
 
@@ -246,12 +262,37 @@ export function isIncompatibleCachedLesson(
     return true;
   }
 
+  if (
+    options?.goalTitle &&
+    options.goalCategory &&
+    resolveKnowledgeGraph(options.goalTitle, options.goalCategory, [
+      options.goalId ?? "",
+    ]).status === "resolved"
+  ) {
+    if (!lesson.knowledgeGraphId || !lesson.canonicalTopicId) {
+      return true;
+    }
+    if (
+      lesson.kgValidationVersion &&
+      lesson.kgValidationVersion !== KG_VALIDATION_VERSION
+    ) {
+      return true;
+    }
+    if (lesson.canonicalTopicId !== topicId && lesson.topicId !== topicId) {
+      return true;
+    }
+  }
+
   return false;
 }
 
 export function readCachedLesson(
   goalId: string,
   topicId: string,
+  options?: {
+    goalTitle?: string;
+    goalCategory?: GoalCategory;
+  },
 ): GeneratedLessonPayload | null {
   if (typeof window === "undefined") {
     return null;
@@ -269,7 +310,13 @@ export function readCachedLesson(
 
   try {
     const parsed = JSON.parse(raw) as GeneratedLessonPayload;
-    if (isIncompatibleCachedLesson(parsed, topicId)) {
+    if (
+      isIncompatibleCachedLesson(parsed, topicId, {
+        goalTitle: options?.goalTitle,
+        goalCategory: options?.goalCategory,
+        goalId,
+      })
+    ) {
       window.sessionStorage.removeItem(cacheKey);
       window.sessionStorage.removeItem(buildOriginKey(goalId, topicId));
       return null;

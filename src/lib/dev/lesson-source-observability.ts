@@ -5,11 +5,20 @@
 
 export type LessonDisplaySource =
   | "Gemini"
+  | "Grok"
+  | "Knowledge Graph"
   | "Lesson Cache"
   | "Deterministic Fallback"
   | "Emergency Fallback";
 
-export type LessonOriginalSource = "ai" | "deterministic" | "emergency";
+/** Original generation provenance preserved across cache hits. */
+export type LessonOriginalSource =
+  | "ai"
+  | "gemini"
+  | "grok"
+  | "kg"
+  | "deterministic"
+  | "emergency";
 
 export interface LessonSourceReport {
   goalTitle: string;
@@ -50,13 +59,26 @@ export function resetServerLessonFallbackPath(): void {
 
 export function originalSourceFromLessonSource(
   source: "ai" | "deterministic" | "cache",
-  generationPath?: "deterministic" | "emergency",
+  generationPath?: LessonOriginalSource,
 ): LessonOriginalSource | undefined {
   if (source === "ai") {
+    if (
+      generationPath === "grok" ||
+      generationPath === "gemini" ||
+      generationPath === "ai"
+    ) {
+      return generationPath;
+    }
     return "ai";
   }
   if (source === "deterministic") {
-    return generationPath === "emergency" ? "emergency" : "deterministic";
+    if (generationPath === "emergency") {
+      return "emergency";
+    }
+    if (generationPath === "kg") {
+      return "kg";
+    }
+    return "deterministic";
   }
   return undefined;
 }
@@ -64,8 +86,14 @@ export function originalSourceFromLessonSource(
 export function displaySourceFromOriginal(
   original: LessonOriginalSource | undefined,
 ): LessonDisplaySource {
-  if (original === "ai") {
+  if (original === "grok") {
+    return "Grok";
+  }
+  if (original === "ai" || original === "gemini") {
     return "Gemini";
+  }
+  if (original === "kg") {
+    return "Knowledge Graph";
   }
   if (original === "emergency") {
     return "Emergency Fallback";
